@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/STL-Export-4CAF50" alt="STL export" />
 </p>
 
-A premium browser-based tool for designing custom 3D-printable vase shapes. Fine-tune the silhouette, create decorative surface patterns, adjust printability settings, and export a ready-to-print STL in a few clicks.
+A browser-based tool for designing custom, printable vase forms. Adjust the silhouette, generate decorative patterns, tune organic shapes, and export the final STL directly from the app.
 
 <div align="center">
   <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1100" />
@@ -15,18 +15,18 @@ A premium browser-based tool for designing custom 3D-printable vase shapes. Fine
 
 ## Overview
 
-This project turns vase design into a fast visual workflow. Instead of modeling by hand in CAD software, you can iterate on proportions, twist, pattern, and print stability directly in the browser and export the final result for your 3D printer.
+This project turns vase design into a fast, visual workflow. Instead of moving between CAD tools and slicer setup, you can iterate on proportions, surface details, decorative patterns, and printability directly in the browser before exporting a model for 3D printing.
 
-## Key features
+## Features
 
-- Real-time 3D visualization while you edit the model
-- Adjustable silhouette with height, base, top opening, shoulders, and belly controls
-- Decorative pattern options including ribs, grooves, rings, waves, facets, and twist styling
-- Organic form controls for more natural, sculptural vase profiles
-- Printability-aware settings to reduce steep overhangs and improve successful prints
-- Direct STL export with no backend required
+- Real-time 3D preview of the vase while editing
+- Adjustable body shape and silhouette controls
+- Pattern and twist options for decorative surfaces
+- Organic deformation tools for more sculptural forms
+- Printability-aware settings to reduce steep overhangs and support issues
+- STL export for direct use with Bambu Studio, Cura, PrusaSlicer, and similar slicers
 
-## Gallery
+## Screenshots
 
 <div align="center">
   <img src="screenshots/app-overview.png" alt="Main configurator overview" width="980" />
@@ -34,14 +34,14 @@ This project turns vase design into a fast visual workflow. Instead of modeling 
   <img src="screenshots/viewer-detail.png" alt="Detailed 3D vase viewer" width="980" />
 </div>
 
-## Why it is useful
+## Why this project
 
-This project is designed for makers who want quick iteration without the friction of traditional CAD workflows. It is especially helpful for:
+The goal is to make custom vase design accessible, fast, and flexible for makers. It is ideal for:
 
 - decorative home objects
 - custom gifts and one-off pieces
-- small maker-lab explorations
-- fast concepting of printable vase forms
+- maker-lab experiments
+- rapid prototyping of printable vase forms
 
 ## Tech stack
 
@@ -84,11 +84,11 @@ http://localhost:3000
 npm run build
 ```
 
-The optimized build output is generated in the `dist` folder.
+The build output is generated in the `dist` folder.
 
 ## How it works
 
-The configurator generates a parametric vase profile and then applies patterning, organic deformation, and printability rules before exporting the final geometry. This makes it easy to test different aesthetic directions while keeping the object suitable for practical 3D printing.
+The configurator builds a parametric vase profile, adds surface features and organic variation, and validates the result against printability constraints before export. This keeps the form expressive while helping maintain practical 3D-printing stability.
 
 ## Project structure
 
@@ -104,7 +104,6 @@ src/
 │   └── vaseShape.js
 ├── index.css
 ├── main.jsx
-├── App.jsx
 └── ...
 ```
 
@@ -114,4 +113,4 @@ This project is open source and intended for maker and 3D-print workflows.
 
 ## Credits
 
-Built for visual, fast, and flexible custom vase design.
+Built for fast visual iteration in the design of custom 3D-printable vases.
