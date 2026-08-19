@@ -43,19 +43,70 @@ const VaseConfigurator = () => {
   const captureRef = useRef(null);
   const savedSnapshot = useRef(null);
 
+  // undo/redo over alle parameters; snel achter elkaar dezelfde schuif
+  // verslepen wordt tot één stap samengevoegd
+  const history = useRef({ past: [], future: [], key: null, at: 0 });
+  const [steps, setSteps] = useState({ undo: 0, redo: 0 });
+  const sync = () => setSteps({ undo: history.current.past.length, redo: history.current.future.length });
+
+  const record = (prev, key = null) => {
+    const h = history.current;
+    const now = Date.now();
+    if (!(key && h.key === key && now - h.at < 700)) h.past = [...h.past, prev].slice(-80);
+    h.key = key;
+    h.at = now;
+    h.future = [];
+    sync();
+  };
+
   const updateParam = (param, value) => {
-    setVaseParams((prev) => ({
-      ...prev,
+    record(vaseParams, param);
+    setVaseParams({
+      ...vaseParams,
       [param]: typeof value === 'boolean' || typeof value === 'number'
         ? value
         : (isNaN(parseFloat(value)) ? value : parseFloat(value)),
-    }));
+    });
   };
 
   // Meerdere parameters tegelijk (presets, randomizer)
   const updateParams = (values) => {
-    setVaseParams((prev) => ({ ...prev, ...values }));
+    record(vaseParams);
+    setVaseParams({ ...vaseParams, ...values });
   };
+
+  const undo = () => {
+    const h = history.current;
+    if (!h.past.length) return;
+    h.future = [vaseParams, ...h.future];
+    setVaseParams(h.past[h.past.length - 1]);
+    h.past = h.past.slice(0, -1);
+    h.key = null;
+    sync();
+  };
+
+  const redo = () => {
+    const h = history.current;
+    if (!h.future.length) return;
+    h.past = [...h.past, vaseParams];
+    setVaseParams(h.future[0]);
+    h.future = h.future.slice(1);
+    h.key = null;
+    sync();
+  };
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const tag = event.target?.tagName;
+      if (tag === 'INPUT' && event.target.type === 'text') return;
+      const key = event.key.toLowerCase();
+      if (key === 'z' && !event.shiftKey) { event.preventDefault(); undo(); }
+      else if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [vaseParams]);
 
   // concept bewaren zodat een refresh je werk niet weggooit
   useEffect(() => {
@@ -125,6 +176,7 @@ const VaseConfigurator = () => {
 
   const handleLoad = (design) => {
     const params = withProfile(design.params);
+    record(vaseParams);
     setVaseParams(params);
     savedSnapshot.current = JSON.stringify(params);
     setActive({ id: design.id, name: design.name });
@@ -176,6 +228,10 @@ const VaseConfigurator = () => {
             params={vaseParams}
             onParamChange={updateParam}
             onParamsChange={updateParams}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={steps.undo > 0}
+            canRedo={steps.redo > 0}
           />
           <ExportButton meshRef={meshRef} params={vaseParams} />
         </aside>

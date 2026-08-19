@@ -225,6 +225,19 @@ body {
   background: linear-gradient(100deg, var(--accent) 0%, var(--accent-2) 100%);
 }
 
+.action-button.icon {
+  flex: 0 0 auto;
+  width: 2.1rem;
+  padding: 0.55rem 0;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.action-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .tab-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -325,6 +338,87 @@ body {
   cursor: not-allowed;
 }
 
+/* ---------- keuzeknoppen met voorbeeldje ---------- */
+
+.chip-row.thumbs {
+  gap: 0.3rem;
+}
+
+.chip.has-thumb {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  width: 3.4rem;
+  padding: 0.3rem 0.15rem 0.25rem;
+  font-size: 0.62rem;
+  line-height: 1.1;
+  white-space: normal;
+  text-align: center;
+}
+
+.thumb {
+  width: 26px;
+  height: 26px;
+  overflow: visible;
+}
+
+.thumb path,
+.thumb circle {
+  fill: rgba(122, 162, 255, 0.22);
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+
+.chip.has-thumb.active .thumb path,
+.chip.has-thumb.active .thumb circle {
+  fill: rgba(11, 13, 18, 0.25);
+}
+
+/* ---------- werkbalk boven de editors ---------- */
+
+.editor-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.tool {
+  padding: 0.18rem 0.4rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.tool:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.tool.active {
+  color: #0b0d12;
+  font-weight: 600;
+  border-color: transparent;
+  background: linear-gradient(100deg, var(--accent) 0%, var(--accent-2) 100%);
+}
+
+.tool:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tool-hint {
+  margin-left: auto;
+  font-size: 0.6rem;
+  color: var(--muted);
+}
+
 /* ---------- profiel-editor ---------- */
 
 .profile-panel {
@@ -339,6 +433,25 @@ body {
   width: 100%;
   height: 190px;
   touch-action: none;
+}
+
+.profile-editor:focus,
+.section-editor:focus {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.profile-editor.pen,
+.section-editor.pen {
+  cursor: crosshair;
+}
+
+.profile-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+  opacity: 0.55;
 }
 
 .profile-bed {
@@ -387,6 +500,31 @@ body {
   stroke: var(--line);
   stroke-width: 1;
   stroke-dasharray: 3 4;
+}
+
+.section-ring {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+  opacity: 0.5;
+}
+
+.section-spoke {
+  stroke: var(--line);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.section-sector {
+  fill: rgba(122, 162, 255, 0.09);
+  stroke: none;
+}
+
+.section-ghost {
+  fill: var(--muted);
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .section-shape {
@@ -441,12 +579,25 @@ body {
 
 /* ---------- sliders ---------- */
 
+.control-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
 .control label {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.4rem;
   margin-bottom: 0.2rem;
+}
+
+.control-head label {
+  display: inline;
+  margin: 0;
 }
 
 .control-label {
@@ -460,6 +611,27 @@ body {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--accent);
+}
+
+.value-input {
+  width: 2.9rem;
+  padding: 0.05rem 0.2rem;
+  font: inherit;
+  color: inherit;
+  text-align: right;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.value-input:hover {
+  border-color: var(--line);
+}
+
+.value-input:focus {
+  outline: none;
+  background: var(--panel-2);
+  border-color: var(--accent);
 }
 
 .control-hint {

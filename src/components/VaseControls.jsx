@@ -10,7 +10,14 @@ import {
   maxProfileDiameter,
   normalizeSection,
   sectionSignature,
+  describeSection,
+  foldSection,
+  expandSection,
+  sectorSpan,
+  foldAngle,
   SECTION_PRESETS,
+  SECTION_FAMILIES,
+  SECTION_SYMMETRIES,
   MIN_NODE_GAP,
   MIN_SECTION_GAP,
   SILHOUETTES,
@@ -22,6 +29,7 @@ import {
 import { FILAMENTS, FINISHES } from '../lib/filaments';
 import ProfileEditor from './ProfileEditor';
 import SectionEditor from './SectionEditor';
+import { SectionThumb, ProfileThumb } from './PresetThumb';
 
 const TABS = [
   { id: 'vorm', label: '🏺 Vorm' },
@@ -32,12 +40,50 @@ const TABS = [
   { id: 'print', label: '🖨️ Print' },
 ];
 
+const decimalsOf = (step) => {
+  const dot = String(step).indexOf('.');
+  return dot < 0 ? 0 : String(step).length - dot - 1;
+};
+
+/** Waarde naast de schuif: ook zelf in te typen. */
+const NumberField = ({ value, min, max, step, unit, onCommit }) => {
+  const [draft, setDraft] = useState(null);
+
+  const commit = (raw) => {
+    setDraft(null);
+    const n = parseFloat(String(raw).replace(',', '.'));
+    if (!Number.isFinite(n)) return;
+    const snapped = Math.round((n - min) / step) * step + min;
+    onCommit(parseFloat(Math.min(max, Math.max(min, snapped)).toFixed(decimalsOf(step))));
+  };
+
+  return (
+    <span className="control-value">
+      <input
+        type="text"
+        inputMode="decimal"
+        className="value-input"
+        value={draft ?? String(value)}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.target.select()}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { commit(e.currentTarget.value); e.currentTarget.blur(); }
+          if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur(); }
+        }}
+      />
+      {unit}
+    </span>
+  );
+};
+
 const Slider = ({ id, label, min, max, step, unit = '', value, hint, onChange, full = false }) => (
   <div className={`control${full ? ' full' : ''}`}>
-    <label htmlFor={id}>
-      <span className="control-label">{label}</span>
-      <span className="control-value">{value}{unit}</span>
-    </label>
+    <div className="control-head">
+      <label className="control-label" htmlFor={id}>{label}</label>
+      <NumberField value={value} min={min} max={max} step={step} unit={unit}
+        onCommit={(v) => onChange(id, v)} />
+    </div>
     <input
       type="range"
       id={id}
@@ -60,24 +106,26 @@ const Toggle = ({ label, checked, onChange, full = false }) => (
   </label>
 );
 
-const Chips = ({ options, value, onSelect, compare }) => (
-  <div className="full chip-row">
+const Chips = ({ options, value, onSelect, compare, thumb }) => (
+  <div className={`full chip-row${thumb ? ' thumbs' : ''}`}>
     {options.map((o) => (
       <button
         key={o.id}
         type="button"
-        className={`chip${(compare ? compare(o) : value === o.id) ? ' active' : ''}`}
+        className={`chip${(compare ? compare(o) : value === o.id) ? ' active' : ''}${thumb ? ' has-thumb' : ''}`}
         onClick={() => onSelect(o)}
       >
-        {o.label}
+        {thumb && thumb(o)}
+        <span>{thumb ? o.label.replace(/^\S+\s+/, '') : o.label}</span>
       </button>
     ))}
   </div>
 );
 
-const VaseControls = ({ params, onParamChange, onParamsChange }) => {
+const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, canUndo, canRedo }) => {
   const [tab, setTab] = useState('vorm');
   const [node, setNode] = useState(1);
+  const [pen, setPen] = useState({ profile: false, section: false });
   const shape = useMemo(() => createVaseShape(params), [params]);
   const profile = useMemo(() => profilePoints(params), [params]);
 
@@ -127,17 +175,28 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
   };
 
   const section = useMemo(() => normalizeSection(params.section), [params.section]);
+  const kind = useMemo(() => describeSection(params.section), [params.section]);
+  const family = kind.family ? SECTION_FAMILIES[kind.family] : null;
+  const sym = Math.max(1, Math.round(params.sectionSym || 1));
+  const mirror = !!params.sectionMirror;
+  const span = sectorSpan(sym, mirror);
+  const sectored = sym > 1 || mirror;
   const [corner, setCorner] = useState(0);
-  const nodes = section || [];
+  // bij symmetrie bewerk je maar één sector; de rest wordt gekopieerd
+  const nodes = useMemo(() => foldSection(params.section, sym, mirror) || [], [params.section, sym, mirror]);
   const cornerIndex = nodes.length ? Math.min(corner, nodes.length - 1) : 0;
   const cornerNode = nodes[cornerIndex];
   const wrap = (v) => ((v % 1) + 1) % 1;
 
+  // hoek terugvouwen naar de sector waarin je tekent
+  const foldTo = (a) => foldAngle(a, sym, mirror);
+
   const setSection = (next, keepAngle = null) => {
-    const clean = normalizeSection(next);
-    onParamChange('section', clean);
-    if (clean && keepAngle !== null) {
-      const at = clean.findIndex((pt) => Math.abs(pt.a - keepAngle) < 1e-9);
+    const full = expandSection(next, sym, mirror);
+    onParamChange('section', full);
+    if (full && keepAngle !== null) {
+      const back = foldSection(full, sym, mirror) || [];
+      const at = back.findIndex((pt) => Math.abs(pt.a - keepAngle) < 1e-4);
       setCorner(at < 0 ? 0 : at);
     }
   };
@@ -146,28 +205,87 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
   const moveCorner = (index, patch) => {
     const n = nodes.length;
     const cur = nodes[index];
+    if (!cur) return;
     let a = cur.a;
-    if (patch.a !== undefined && n > 2) {
-      const prev = nodes[(index - 1 + n) % n].a;
-      const span = wrap(nodes[(index + 1) % n].a - prev);
-      const room = span - MIN_SECTION_GAP;
-      a = room > MIN_SECTION_GAP
-        ? wrap(prev + Math.min(room, Math.max(MIN_SECTION_GAP, wrap(patch.a - prev))))
-        : cur.a;
+    if (patch.a !== undefined) {
+      if (sectored) {
+        const lo = index > 0 ? nodes[index - 1].a + MIN_SECTION_GAP : 0;
+        const hi = index < n - 1 ? nodes[index + 1].a - MIN_SECTION_GAP : span;
+        a = hi >= lo ? Math.min(hi, Math.max(lo, foldTo(patch.a))) : cur.a;
+      } else if (n > 2) {
+        const prev = nodes[(index - 1 + n) % n].a;
+        const room = wrap(nodes[(index + 1) % n].a - prev) - MIN_SECTION_GAP;
+        a = room > MIN_SECTION_GAP
+          ? wrap(prev + Math.min(room, Math.max(MIN_SECTION_GAP, wrap(patch.a - prev))))
+          : cur.a;
+      }
     }
-    const next = nodes.map((pt, i) => (i === index ? { ...pt, ...patch, a } : pt));
-    setSection(next, a);
+    setSection(nodes.map((pt, i) => (i === index ? { ...pt, ...patch, a } : pt)), a);
   };
 
   const addCorner = (at) => {
-    const base = nodes.length ? nodes : (SECTION_PRESETS.find((s) => s.id === 'vrij').make());
-    setSection([...base, { a: at.a, r: at.r, sharp: false }], at.a);
+    const base = nodes.length
+      ? nodes
+      : (foldSection(SECTION_PRESETS.find((s) => s.id === 'vrij').make(), sym, mirror) || []);
+    const a = foldTo(at.a);
+    setSection([...base, { a, r: at.r, sharp: false }], a);
   };
 
+  const restAfterRemove = nodes.filter((_, i) => i !== cornerIndex);
+  const canRemoveCorner = nodes.length > 1 && !!expandSection(restAfterRemove, sym, mirror);
+
   const removeCorner = () => {
-    if (nodes.length <= 3) return;
-    setSection(nodes.filter((_, i) => i !== cornerIndex), nodes[(cornerIndex + 1) % nodes.length].a);
+    if (!canRemoveCorner) return;
+    setSection(restAfterRemove, nodes[(cornerIndex + 1) % nodes.length].a);
   };
+
+  const toggleCorner = (index) => {
+    const pt = nodes[index];
+    if (!pt) return;
+    setSection(nodes.map((p, i) => (i === index ? { ...p, sharp: !p.sharp } : p)), pt.a);
+  };
+
+  // symmetrie wisselen: de bestaande vorm wordt naar de nieuwe sector gevouwen
+  const setSymmetry = (nextSym, nextMirror) => {
+    const master = foldSection(params.section, nextSym, nextMirror);
+    onParamsChange({
+      sectionSym: nextSym,
+      sectionMirror: nextMirror,
+      section: master ? expandSection(master, nextSym, nextMirror) : params.section,
+    });
+    setCorner(0);
+  };
+
+  const setSides = (n) => {
+    const sides = Number(n);
+    onParamsChange({
+      section: normalizeSection(SECTION_FAMILIES[kind.family].make(sides)),
+      sectionSym: kind.family === 'vrij' ? sym : sides,
+      sectionMirror: kind.family === 'vrij' ? mirror : false,
+    });
+    setCorner(0);
+  };
+
+  const selectPreset = (preset) => {
+    onParamsChange({
+      section: normalizeSection(preset.make()),
+      sectionSym: preset.family && preset.family !== 'vrij' ? preset.sides : (preset.id === 'ovaal' ? 2 : 1),
+      sectionMirror: preset.id === 'ovaal',
+    });
+    setCorner(0);
+  };
+
+  const sectionThumbs = useMemo(
+    () => Object.fromEntries(SECTION_PRESETS.map((p) => [p.id, <SectionThumb points={p.make()} />])),
+    [],
+  );
+  const silhouetteThumbs = useMemo(
+    () => Object.fromEntries(SILHOUETTES.map((s) => [
+      s.id, <ProfileThumb profile={applySilhouette(s, maxDiameter, params.height).profile} />,
+    ])),
+    [maxDiameter, params.height],
+  );
+
   const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
   const layers = Math.ceil(params.height / params.layerHeight);
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
@@ -184,6 +302,10 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
         <button type="button" className="action-button" onClick={() => onParamsChange({ seed: randomSeed() })}>
           🌱 Andere seed
         </button>
+        <button type="button" className="action-button icon" onClick={onUndo} disabled={!canUndo}
+          title="Ongedaan maken (Ctrl+Z)">↶</button>
+        <button type="button" className="action-button icon" onClick={onRedo} disabled={!canRedo}
+          title="Opnieuw (Ctrl+Shift+Z)">↷</button>
       </div>
 
       <div className="tab-row">
@@ -208,6 +330,7 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
                 options={SILHOUETTES}
                 onSelect={(s) => onParamsChange(applySilhouette(s, maxDiameter, params.height))}
                 compare={() => false}
+                thumb={(s) => silhouetteThumbs[s.id]}
               />
               <Slider id="height" label="Hoogte" min={60} max={PRINTER_LIMITS.maxHeight} step={1} unit="mm"
                 value={params.height} onChange={onParamChange} />
@@ -217,15 +340,26 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
 
               <h3 className="section-title full">Controlepunten</h3>
               <div className="full profile-panel">
+                <div className="editor-tools">
+                  <button type="button" className={`tool${pen.profile ? ' active' : ''}`}
+                    onClick={() => setPen((p) => ({ ...p, profile: !p.profile }))}
+                    title="Pen: klik in de tekening om punten te zetten">✎ Pen</button>
+                  <button type="button" className="tool" onClick={addNode} title="Punt erbij">＋</button>
+                  <button type="button" className="tool" onClick={removeNode}
+                    disabled={isEnd || profile.length <= 2} title="Geselecteerd punt wissen">−</button>
+                  <span className="tool-hint">{pen.profile ? 'klik = punt erbij' : 'dubbelklik = punt erbij'}</span>
+                </div>
                 <ProfileEditor
                   profile={profile}
                   height={params.height}
                   selected={active}
+                  pen={pen.profile}
                   onSelect={setNode}
                   onMove={moveNode}
                   onAdd={addNodeAt}
+                  onRemove={removeNode}
                 />
-                <p className="control-hint">Sleep een punt · dubbelklik in de vorm voor een punt erbij</p>
+                <p className="control-hint">Sleep · Shift = vastklikken · pijltjes = fijn bijstellen · Delete = wissen</p>
               </div>
               <div className="full chip-row">
                 {profile.map((p, i) => (
@@ -265,46 +399,80 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
               <h3 className="section-title full">Vorm van bovenaf</h3>
               <Chips
                 options={SECTION_PRESETS}
-                onSelect={(preset) => {
-                  onParamChange('section', normalizeSection(preset.make()));
-                  setCorner(0);
-                }}
-                compare={(preset) => sectionSignature(preset.make()) === sectionSignature(params.section)}
+                onSelect={selectPreset}
+                compare={(preset) => (preset.family
+                  ? kind.family === preset.family && (!preset.exact || kind.sides === preset.sides)
+                  : sectionSignature(preset.make()) === sectionSignature(params.section))}
+                thumb={(preset) => sectionThumbs[preset.id]}
               />
+              {family && (
+                <Slider id="sectionSides" label={`Aantal ${family.unit}`} min={family.min} max={family.max} step={1}
+                  value={kind.sides} onChange={(_, v) => setSides(v)} full />
+              )}
+
+              <h3 className="section-title full">Symmetrie</h3>
+              <Chips
+                options={[...new Set([...SECTION_SYMMETRIES, sym])].sort((a, b) => a - b)
+                  .map((n) => ({ id: n, label: n === 1 ? 'Vrij' : `${n}×` }))}
+                value={sym}
+                onSelect={(o) => setSymmetry(o.id, mirror)}
+              />
+              <Toggle label="Spiegelen in de sector" checked={mirror}
+                onChange={(v) => setSymmetry(sym, v)} full />
+
               <div className="full profile-panel">
+                <div className="editor-tools">
+                  <button type="button" className={`tool${pen.section ? ' active' : ''}`}
+                    onClick={() => setPen((p) => ({ ...p, section: !p.section }))}
+                    title="Pen: klik in de tekening om punten te zetten">✎ Pen</button>
+                  <button type="button" className="tool" onClick={() => toggleCorner(cornerIndex)}
+                    disabled={!cornerNode} title="Rond of hoekig (rechtermuis op een punt)">⬡</button>
+                  <button type="button" className="tool" onClick={removeCorner}
+                    disabled={!canRemoveCorner} title="Geselecteerd punt wissen">−</button>
+                  <span className="tool-hint">
+                    {sectored ? `je tekent ${Math.round(span * 360)}° · rest wordt gekopieerd` : 'hele rondte vrij'}
+                  </span>
+                </div>
                 <SectionEditor
                   section={section}
+                  nodes={nodes}
+                  sym={sym}
+                  mirror={mirror}
                   selected={cornerIndex}
+                  pen={pen.section}
                   onSelect={setCorner}
                   onMove={moveCorner}
                   onAdd={addCorner}
+                  onToggle={toggleCorner}
+                  onRemove={removeCorner}
                 />
                 <p className="control-hint">
                   {section
-                    ? 'Sleep een punt · dubbelklik voor een punt erbij · vierkantjes zijn hoeken'
+                    ? 'Sleep · rechtermuis = rond/hoekig · Shift = vastklikken · pijltjes = fijn bijstellen'
                     : 'Rond. Kies een vorm of dubbelklik om zelf te tekenen.'}
                 </p>
               </div>
               {cornerNode && (
                 <>
-                  <Slider id="cornerAngle" label={`Punt ${cornerIndex + 1} van ${nodes.length}`} min={0} max={359} step={1} unit="°"
+                  <Slider id="cornerAngle" label={`Punt ${cornerIndex + 1} van ${nodes.length}`}
+                    min={0} max={Math.round(span * 360)} step={1} unit="°"
                     value={Math.round(cornerNode.a * 360)}
                     onChange={(_, v) => moveCorner(cornerIndex, { a: Number(v) / 360 })} />
                   <Slider id="cornerRadius" label="Straal" min={25} max={100} step={1} unit="%"
                     value={Math.round(cornerNode.r * 100)}
                     onChange={(_, v) => moveCorner(cornerIndex, { r: Number(v) / 100 })} />
                   <Toggle label="Hoekig (rechte zijden)" checked={!!cornerNode.sharp}
-                    onChange={(v) => moveCorner(cornerIndex, { sharp: v })} full />
+                    onChange={() => toggleCorner(cornerIndex)} full />
                   <div className="full chip-row">
                     <button type="button" className="chip"
-                      onClick={() => setSection(nodes.map((pt) => ({ ...pt, sharp: true })))}>
+                      onClick={() => setSection(nodes.map((pt) => ({ ...pt, sharp: true })), cornerNode.a)}>
                       Alles hoekig
                     </button>
                     <button type="button" className="chip"
-                      onClick={() => setSection(nodes.map((pt) => ({ ...pt, sharp: false })))}>
+                      onClick={() => setSection(nodes.map((pt) => ({ ...pt, sharp: false })), cornerNode.a)}>
                       Alles rond
                     </button>
-                    <button type="button" className="chip" onClick={removeCorner} disabled={nodes.length <= 3}>
+                    <button type="button" className="chip" onClick={removeCorner} disabled={!canRemoveCorner}>
                       − Punt wissen
                     </button>
                   </div>

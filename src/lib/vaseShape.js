@@ -249,18 +249,20 @@ export function buildSectionField(points) {
     }
   }
 
-  // gaten opvullen tussen de bemonsterde hoeken
-  let last = -1;
-  for (let i = 0; i < SECTION_BINS && last < 0; i++) if (table[i] >= 0) last = i;
+  // gaten opvullen tussen de bemonsterde hoeken; we lopen één rondje vanaf de
+  // eerste gevulde bin, zodat elke lege bin tussen zijn buren wordt ingevuld
+  let start = -1;
+  for (let i = 0; i < SECTION_BINS && start < 0; i++) if (table[i] >= 0) start = i;
+  if (start < 0) return null;
   for (let k = 1; k <= SECTION_BINS; k++) {
-    const i = (last + k) % SECTION_BINS;
-    if (table[i] >= 0) { last = i; continue; }
-    let next = i;
+    const i = (start + k) % SECTION_BINS;
+    if (table[i] >= 0) continue;
+    let next = (i + 1) % SECTION_BINS;
     let gap = 1;
-    while (table[next] < 0 && gap <= SECTION_BINS) { next = (next + 1) % SECTION_BINS; gap++; }
-    const a = table[last];
+    while (table[next] < 0 && gap < SECTION_BINS) { next = (next + 1) % SECTION_BINS; gap++; }
+    const a = table[(i - 1 + SECTION_BINS) % SECTION_BINS];
     const b = table[next];
-    table[i] = a + (b - a) * (1 / gap);
+    table[i] = a + (b - a) / (gap + 1);
   }
 
   const at = (angle) => {
@@ -269,7 +271,8 @@ export function buildSectionField(points) {
     const f = x - i;
     const lo = table[((i % SECTION_BINS) + SECTION_BINS) % SECTION_BINS];
     const hi = table[(((i + 1) % SECTION_BINS) + SECTION_BINS) % SECTION_BINS];
-    return lo + (hi - lo) * f;
+    // ondergrens: een doorschietende curve mag de vaas nooit binnenstebuiten keren
+    return Math.max(0.05, lo + (hi - lo) * f);
   };
 
   return { at, points: pts, hasCorners: pts.some((pt) => pt.sharp) };
@@ -284,20 +287,43 @@ const polySection = (n, sharp = true, inner = 1) => {
   return out;
 };
 
+/**
+ * Doorsnedes met een instelbaar aantal punten. Het maximum houdt rekening met
+ * MIN_SECTION_GAP: families met een tussenpunt gebruiken 2× zoveel punten.
+ */
+export const SECTION_FAMILIES = {
+  veelhoek: { unit: 'hoeken', min: 3, max: 24, make: (n) => polySection(n) },
+  ster: { unit: 'punten', min: 3, max: 16, make: (n) => polySection(n, true, 0.55) },
+  bloem: { unit: 'blaadjes', min: 3, max: 16, make: (n) => polySection(n, false, 0.72) },
+  lob: { unit: 'lobben', min: 3, max: 16, make: (n) => polySection(n, false, 0.62) },
+  vrij: { unit: 'punten', min: 3, max: 24, make: (n) => polySection(n, false) },
+};
+
+const familyPreset = (id, label, key, sides, exact = false) => ({
+  id,
+  label,
+  family: key,
+  sides,
+  exact,
+  make: (n = sides) => SECTION_FAMILIES[key].make(
+    clamp(Math.round(n), SECTION_FAMILIES[key].min, SECTION_FAMILIES[key].max),
+  ),
+});
+
 export const SECTION_PRESETS = [
   { id: 'rond', label: '○ Rond', make: () => null },
   { id: 'ovaal', label: '⬭ Ovaal', make: () => [
     { a: 0, r: 1 }, { a: 0.25, r: 0.68 }, { a: 0.5, r: 1 }, { a: 0.75, r: 0.68 },
   ] },
-  { id: 'driehoek', label: '△ Driehoek', make: () => polySection(3) },
-  { id: 'vierkant', label: '◻ Vierkant', make: () => polySection(4) },
-  { id: 'vijfhoek', label: '⬠ Vijfhoek', make: () => polySection(5) },
-  { id: 'zeshoek', label: '⬡ Zeshoek', make: () => polySection(6) },
-  { id: 'achthoek', label: '⯃ Achthoek', make: () => polySection(8) },
-  { id: 'ster', label: '✦ Ster', make: () => polySection(6, true, 0.55) },
-  { id: 'bloem', label: '❀ Bloem', make: () => polySection(6, false, 0.72) },
-  { id: 'lob', label: '❍ Lobben', make: () => polySection(3, false, 0.62) },
-  { id: 'vrij', label: '✎ Vrij tekenen', make: () => polySection(8, false) },
+  familyPreset('driehoek', '△ Driehoek', 'veelhoek', 3, true),
+  familyPreset('vierkant', '◻ Vierkant', 'veelhoek', 4, true),
+  familyPreset('vijfhoek', '⬠ Vijfhoek', 'veelhoek', 5, true),
+  familyPreset('zeshoek', '⬡ Zeshoek', 'veelhoek', 6, true),
+  familyPreset('achthoek', '⯃ Achthoek', 'veelhoek', 8, true),
+  familyPreset('ster', '✦ Ster', 'ster', 6),
+  familyPreset('bloem', '❀ Bloem', 'bloem', 6),
+  familyPreset('lob', '❍ Lobben', 'lob', 3),
+  familyPreset('vrij', '✎ Vrij tekenen', 'vrij', 8),
 ];
 
 /** Vingerafdruk van een doorsnede, om te zien welke preset actief is. */
@@ -306,6 +332,82 @@ export const sectionSignature = (list) => {
   if (!clean) return 'rond';
   return clean.map((pt) => `${pt.a.toFixed(3)}:${pt.r.toFixed(3)}:${pt.sharp ? 1 : 0}`).join('|');
 };
+
+/**
+ * Herkent uit welke familie een doorsnede komt en met hoeveel punten, zodat de
+ * schuif voor het aantal punten meebeweegt. Zelf versleepte vormen horen bij
+ * geen familie meer.
+ */
+export function describeSection(list) {
+  const clean = normalizeSection(list);
+  if (!clean) return { family: null, sides: 0 };
+  const sig = sectionSignature(clean);
+  for (const [key, fam] of Object.entries(SECTION_FAMILIES)) {
+    for (let n = fam.min; n <= fam.max; n++) {
+      if (sectionSignature(fam.make(n)) === sig) return { family: key, sides: n };
+    }
+  }
+  return { family: null, sides: clean.length };
+}
+
+/** Keuzes voor de symmetrie van de doorsnede-editor; 1 = vrij tekenen. */
+export const SECTION_SYMMETRIES = [1, 2, 3, 4, 5, 6, 8, 12];
+
+const wrap1 = (v) => ((v % 1) + 1) % 1;
+
+// modulo met een marge, zodat 2/6 % (1/6) netjes 0 wordt en niet bijna 1/6
+const modStep = (v, step) => {
+  const x = wrap1(v) % step;
+  return x < 1e-6 || x > step - 1e-6 ? 0 : x;
+};
+
+/** Grootte van het stuk dat je zelf tekent; de rest wordt gekopieerd. */
+export const sectorSpan = (sym = 1, mirror = false) => (mirror ? 0.5 : 1) / Math.max(1, sym);
+
+/** Een hoek terugvouwen naar de sector waarin je tekent. */
+export function foldAngle(a, sym = 1, mirror = false) {
+  const step = 1 / Math.max(1, sym);
+  const x = modStep(a, step);
+  return mirror && x > step / 2 ? step - x : x;
+}
+
+/**
+ * De punten van één sector: dat is het stuk dat je in de editor bewerkt.
+ * Punten buiten de sector vervallen — die worden immers gekopieerd. Ligt er
+ * niets in de sector, dan vouwen we alles alsnog terug.
+ */
+export function foldSection(points, sym = 1, mirror = false) {
+  const list = normalizeSection(points);
+  if (!list) return null;
+  if (sym <= 1 && !mirror) return list;
+  const span = sectorSpan(sym, mirror);
+  // spiegelen: het punt precies op de spiegelas hoort er nog bij; zonder
+  // spiegeling is het eindpunt van de sector al de kopie van het beginpunt
+  const inSector = list.filter((pt) => (mirror ? pt.a <= span + 1e-6 : pt.a < span - 1e-6));
+  const source = inSector.length ? inSector : list;
+  const folded = [];
+  source.forEach((pt) => {
+    const a = inSector.length ? pt.a : foldAngle(pt.a, sym, mirror);
+    if (!folded.some((f) => Math.abs(f.a - a) < MIN_SECTION_GAP / 2)) folded.push({ ...pt, a });
+  });
+  return folded.sort((x, y) => x.a - y.a);
+}
+
+/** Eén sector rondkopiëren (en eventueel spiegelen) tot een hele doorsnede. */
+export function expandSection(master, sym = 1, mirror = false) {
+  if (!Array.isArray(master) || !master.length) return null;
+  if (sym <= 1 && !mirror) return normalizeSection(master);
+  const step = 1 / Math.max(1, sym);
+  const out = [];
+  for (let s = 0; s < Math.max(1, sym); s++) {
+    master.forEach((pt) => {
+      const a = modStep(pt.a, step);
+      out.push({ ...pt, a: wrap1(s * step + a) });
+      if (mirror) out.push({ ...pt, a: wrap1(s * step - a) });
+    });
+  }
+  return normalizeSection(out);
+}
 
 /** Doorsnede van een ontwerp, of null als hij rond is. */
 export const sectionOf = (p) => normalizeSection(p?.section);
@@ -321,6 +423,9 @@ export const DEFAULT_SHAPE = {
   ],
   // dwarsdoorsnede: null = rond, anders punten {a, r, sharp}
   section: null,
+  // symmetrie tijdens het tekenen van de doorsnede (1 = vrij)
+  sectionSym: 1,
+  sectionMirror: false,
   // 1.2mm = 3 lijnen van 0.4mm: stevig en waterdicht, ook zonder vase mode
   thickness: 1.2,
   // symmetrisch patroon
@@ -793,6 +898,8 @@ export function randomVaseParams(rnd = Math.random) {
     // alles uit; de gekozen stijl zet hieronder aan wat nodig is
     ...NO_DECOR,
     section: null,
+    sectionSym: 1,
+    sectionMirror: false,
     facetStrength: 0,
     ringAmount: 0,
     bumpDepth: 0,
@@ -815,6 +922,7 @@ export function randomVaseParams(rnd = Math.random) {
     const sharp = chance(0.6);
     const inner = chance(0.35) ? range(0.55, 0.8) : 1;
     out.section = normalizeSection(polySection(sides, sharp, inner));
+    out.sectionSym = sides;
   }
 
   const refRadius = createVaseShape(out).baseRadiusAt(0.5);
