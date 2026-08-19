@@ -334,7 +334,7 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
               />
               <Slider id="height" label="Hoogte" min={60} max={PRINTER_LIMITS.maxHeight} step={1} unit="mm"
                 value={params.height} onChange={onParamChange} />
-              <Slider id="thickness" label="Wanddikte" min={0.4} max={2.4} step={0.2} unit="mm"
+              <Slider id="thickness" label="Wanddikte" min={0.8} max={2.4} step={0.2} unit="mm"
                 value={params.thickness} onChange={onParamChange}
                 hint="0.8 = vase mode · 1.2 = 3 lijnen" />
 
@@ -623,6 +623,7 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
               <p className="control-hint full">
                 Aan: de STL is een massief lichaam zonder binnenwand. Zet spiral/vase mode aan in de
                 slicer — die print dan één doorlopende wand. Uit: normale holle vaas.
+                Een golvende rand blijft in vase mode vlak: één spiraal kan geen losse tongen printen.
               </p>
             </>
           )}
@@ -643,6 +644,11 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
         )}
         {shape.baseOverhangDeg > overhangLimit && (
           <p className="bad">⚠️ Het silhouet zelf is te steil ({Math.round(shape.baseOverhangDeg)}°) — pas de diameters aan.</p>
+        )}
+        {params.autoLimit === false && (
+          <p className="bad">
+            ⚠️ Auto printbaar staat uit — bij diep reliëf kan de wand door zichzelf heen lopen en slicet de STL niet schoon.
+          </p>
         )}
         {!fitsBed && (
           <p className="bad">⚠️ Past niet op de P1S ({PRINTER_LIMITS.maxDiameter}mm Ø × {PRINTER_LIMITS.maxHeight}mm).</p>

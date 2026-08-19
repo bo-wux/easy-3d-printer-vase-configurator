@@ -538,7 +538,9 @@ export function createVaseShape(params) {
 
   // Golvende rand: de bovenrand zakt plaatselijk weg, totale hoogte blijft gelijk
   const rimCount = Math.round(p.rimWaveCount ?? 0);
-  const rimAmp = rimCount >= 2 ? clamp((p.rimWaveDepth ?? 0) / 100, 0, 0.2) * height : 0;
+  // In vase mode print de slicer één doorlopende spiraal: een golvende rand
+  // valt dan in losse tongen uiteen en is niet te printen, dus die blijft vlak.
+  const rimAmp = rimCount >= 2 && !p.vaseMode ? clamp((p.rimWaveDepth ?? 0) / 100, 0, 0.2) * height : 0;
 
   // Genormaliseerd naar [-1, 1]
   const organicField = (angle, t) => {
@@ -667,10 +669,28 @@ export function createVaseShape(params) {
     return { x: Math.cos(a) * amt, z: Math.sin(a) * amt };
   };
 
+  // Hoogste hoekfrequentie in de versiering en hoe snel het patroon meedraait.
+  // Samen bepalen ze hoe fijn we moeten meten en hoeveel rijen de mesh nodig
+  // heeft: draait het patroon sneller dan we bemonsteren, dan vouwt de wand.
+  const patternFreq = Math.max(
+    1,
+    waveAmp > 0 ? waveCount : 0,
+    facetStrength > 0 ? facetCount : 0,
+    bumpAmp !== 0 ? bumpCols : 0,
+    textureAmp > 0 ? textureCols : 0,
+    organicAmount > 0 ? maxOrder : 0,
+    rimAmp > 0 ? rimCount : 0,
+    section ? section.points.length : 0
+  );
+  const rotRate = Math.abs(p.twistMode === 'heen' ? twistRad * Math.PI * twistWaves : twistRad);
+  const twistRows = (2 * rotRate * patternFreq) / TAU;
+
   // Overhang = hoek van de wand t.o.v. verticaal; te steil = zakt door in vase mode
   const measureOverhang = (scale) => {
-    const steps = 60;
-    const angles = 24;
+    const steps = clamp(Math.round(60 + twistRows), 60, 800);
+    // minstens vier monsters per patroonperiode, anders meet je steeds dezelfde
+    // fase en mis je precies de steile flanken
+    const angles = clamp(Math.round(patternFreq * 4), 24, 192);
     const dt = 1 / steps;
     let max = 0;
     for (let i = 0; i < steps; i++) {
@@ -698,18 +718,32 @@ export function createVaseShape(params) {
     || facetStrength > 0 || bumpAmp !== 0 || textureAmp > 0 || rimAmp > 0;
 
   let detailScale = 1;
-  // Als het silhouet zelf al te steil is valt er niets te redden met schalen:
-  // dan alleen waarschuwen, de gebruiker moet de diameters aanpassen.
-  if (p.autoLimit && hasDetail && baseOverhang < limit && measureOverhang(1) > limit) {
+  // Grootste schaal waarbij `bad` niet meer geldt; 12 stappen halveren is ruim
+  // nauwkeurig genoeg voor iets dat je toch niet ziet.
+  const shrinkUntil = (bad, start) => {
     let lo = 0;
-    let hi = 1;
+    let hi = start;
     for (let i = 0; i < 12; i++) {
       const mid = (lo + hi) / 2;
-      if (measureOverhang(mid) > limit) hi = mid;
+      if (bad(mid)) hi = mid;
       else lo = mid;
     }
-    detailScale = lo;
-  }
+    return lo;
+  };
+
+  // De versiering mag de wand nooit steiler maken dan het silhouet zelf al is.
+  // Is het silhouet al te steil, dan valt daar met schalen niets aan te doen
+  // (de gebruiker moet de diameters aanpassen), maar de versiering mag er dan
+  // ook niets bovenop doen.
+  const steepTarget = Math.max(limit, baseOverhang);
+  const tooSteep = (scale) => measureOverhang(scale) > steepTarget;
+  if (p.autoLimit && hasDetail && tooSteep(1)) detailScale = shrinkUntil(tooSteep, 1);
+
+  // Vouwgrens: voorbij ~90° klapt het oppervlak over zichzelf heen en is het
+  // model geen gesloten lichaam meer. Die grens geldt ook met de veilige
+  // limieten uit, anders exporteer je een STL die geen slicer kan vullen.
+  const folds = (scale) => measureOverhang(scale) > 88;
+  if (hasDetail && folds(detailScale)) detailScale = shrinkUntil(folds, detailScale);
 
   const radiusAt = (angle, t) => radiusRaw(angle, t, detailScale);
   const centerAt = (t) => centerRaw(t, detailScale);
@@ -742,14 +776,85 @@ export function createVaseShape(params) {
   );
   const heightSegments = clamp(
     Math.round(
-      80 + flow * detail * 12 + swayTurns * 30 + ringCount * 8 + Math.abs(p.twistAngle) / 12
+      80 + flow * detail * 12 + swayTurns * 30 + ringCount * 8 + twistRows * detailScale
         + (bumpAmp !== 0 ? bumpRows * 12 : 0)
         + (textureAmp > 0 ? textureRows * 6 : 0)
         + (rimAmp > 0 ? 40 : 0)
     ),
     80,
-    280
+    360
   );
+
+  /**
+   * Binnenwand van één ring. De binnencontour is de buitencontour geërodeerd
+   * met de wanddikte, niet een simpele radiale offset: bij een scherpe of
+   * steile versiering zou die door de buitenkant heen steken en snijdt het
+   * model zichzelf. We eroderen tegen de daadwerkelijke mesh-lijnstukken (niet
+   * alleen de hoekpunten), want dat is de vorm die de slicer te zien krijgt.
+   */
+  const innerRing = (t) => {
+    const n = radialSegments;
+    const step = TAU / n;
+    const px = new Float64Array(n);
+    const py = new Float64Array(n);
+    const rOut = new Float64Array(n);
+    let rMin = Infinity;
+    for (let j = 0; j < n; j++) {
+      const a = j * step;
+      const r = radiusAt(a, t);
+      rOut[j] = r;
+      px[j] = Math.cos(a) * r;
+      py[j] = Math.sin(a) * r;
+      if (r < rMin) rMin = r;
+    }
+    // buiten deze hoek kan geen enkel stuk contour nog binnen de wanddikte liggen
+    const span = Math.min(0.8, 2 * Math.asin(clamp(wall / Math.max(wall, rMin), 0, 1)) + step);
+    const k = Math.min(64, Math.ceil(span / step));
+    const c = centerAt(t);
+    const pts = new Array(n);
+    for (let j = 0; j < n; j++) {
+      const a = j * step;
+      const ux = Math.cos(a);
+      const uy = Math.sin(a);
+      let ri = rOut[j] - wall;
+      for (let d = -k; d <= k; d++) {
+        const i0 = (((j + d) % n) + n) % n;
+        const i1 = (((j + d + 1) % n) + n) % n;
+        const ax = px[i0];
+        const ay = py[i0];
+        // hoekpunt: straal waarop de straal de cirkel met radius wall raakt
+        const ua = ux * ax + uy * ay;
+        const disc = ua * ua - (ax * ax + ay * ay) + wall * wall;
+        if (disc > 0) {
+          const rho = ua - Math.sqrt(disc);
+          if (rho > 0 && rho < ri) ri = rho;
+        }
+        // lijnstuk: straal waarop hij op wall van de flank tussen twee punten ligt
+        const ex = px[i1] - ax;
+        const ey = py[i1] - ay;
+        const len = Math.hypot(ex, ey);
+        if (len < 1e-9) continue;
+        const nx = -ey / len;
+        const ny = ex / len;
+        const un = ux * nx + uy * ny;
+        if (Math.abs(un) < 1e-9) continue;
+        const an = ax * nx + ay * ny;
+        for (let s = -1; s <= 1; s += 2) {
+          const rho = (an + s * wall) / un;
+          if (rho <= 0 || rho >= ri) continue;
+          const proj = ((rho * ux - ax) * ex + (rho * uy - ay) * ey) / len;
+          if (proj >= 0 && proj <= len) ri = rho;
+        }
+      }
+      ri = Math.max(0.3, ri);
+      pts[j] = {
+        x: c.x + Math.cos(a) * ri,
+        y: heightAt(a, t, detailScale),
+        z: c.z + Math.sin(a) * ri,
+      };
+    }
+    return pts;
+  };
 
   return {
     height,
@@ -759,6 +864,7 @@ export function createVaseShape(params) {
     centerAt,
     heightAt,
     pointAt,
+    innerRing,
     radialSegments,
     heightSegments,
     // grootste bobbelhoogte die bij dit raster nog veilig is, in % van de straal
