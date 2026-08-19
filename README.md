@@ -1,18 +1,23 @@
 # Easy 3D Printer Vase Configurator
 
-Een moderne webapp voor het ontwerpen, aanpassen en exporteren van 3D-printbare vazen. De configurator draait volledig in de browser en genereert een printable STL-directie voor je 3D-printer.
+A browser-based design tool for creating custom, printable vase shapes for 3D printers. It lets you adjust the silhouette, surface pattern, printability constraints, and export the final model as an STL file directly from the app.
 
 <div align="center">
   <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1000" />
 </div>
 
+## Why this project exists
+
+This project was built to make vase design faster and more visual for makers who want to iterate on shape, proportions, and printability without leaving the browser. Instead of manually editing geometry in CAD software, you can tweak parameters, preview the model in 3D, and export a ready-to-print result in a few clicks.
+
 ## Highlights
 
-- Real-time 3D preview van de vaasvorm
-- Aanpasbare parameters zoals hoogte, diameter, wanddikte en twist
-- Print preview en visuele controle van de geometrie
-- STL export voor 3D-printen direct vanuit de browser
-- Responsive interface voor snel itereren op ontwerpkeuzes
+- Real-time 3D preview of the vase as you edit it
+- Adjustable shape controls for height, base, opening, wall thickness, and more
+- Multiple style presets and pattern generations for unique results
+- Printability-aware settings to reduce overhang and improve stability
+- STL export directly from the browser for desktop or Bambu Lab workflows
+- Responsive UI for quick experimentation and iteration
 
 ## Screenshots
 
@@ -24,13 +29,14 @@ Een moderne webapp voor het ontwerpen, aanpassen en exporteren van 3D-printbare 
 
 ## Features
 
-- Hoek- en vorminstellingen voor unieke vaasprofielen
-- Regelbare wall thickness en print parameters
-- Realistische 3D rendering met React Three Fiber
-- Directe STL-download zonder server-side exporttool
-- Geschikt voor MakerLab- of Bambu Lab workflows
+- Custom vase profiles with variable proportions
+- Symmetrical pattern controls for ribs, grooves, rings, and twist effects
+- Organic deformation options for more natural-looking shapes
+- Visual print preview and material styling controls
+- Browser-based STL export without a backend
+- Optimized for maker workflows and small-batch 3D printing
 
-## Tech Stack
+## Tech stack
 
 - React 18
 - Vite
@@ -38,49 +44,50 @@ Een moderne webapp voor het ontwerpen, aanpassen en exporteren van 3D-printbare 
 - @react-three/fiber
 - @react-three/drei
 
-## Installatie
+## Installation
 
-1. Clone de repository:
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/bo-wux/easy-3d-printer-vase-configurator.git
 cd easy-3d-printer-vase-configurator
 ```
 
-2. Installeer dependencies:
+2. Install dependencies:
 
 ```bash
 npm install
 ```
 
-3. Start de development server:
+3. Start the development server:
 
 ```bash
 npm run dev
 ```
 
-4. Open de app in je browser op:
+4. Open the app in your browser:
 
 ```text
 http://localhost:3000
 ```
 
-## Build voor productie
+## Production build
 
 ```bash
 npm run build
 ```
 
-De build wordt gegenereerd in de `dist` map.
+The optimized build output is generated in the `dist` folder.
 
-## Gebruik
+## How to use it
 
-- Pas de vorm aan met de sliders in het linkerpaneel
-- Bekijk de vaas direct in 3D
-- Zoom en draai in de viewer om verschillende hoeken te inspecteren
-- Klik op de exportknop om een STL-bestand te downloaden
+- Adjust the basic silhouette using the sliders on the left
+- Switch between different vase types and design styles
+- Tune the pattern and organic deformation controls for a more custom look
+- Review the model in the 3D viewport and inspect it from multiple angles
+- Click the export button to download the generated STL for printing
 
-## Projectstructuur
+## Project structure
 
 ```text
 src/
@@ -98,10 +105,21 @@ src/
 └── ...
 ```
 
-## Licentie
+## Design and printing notes
 
-Dit project is open source en bedoeld voor MakerLab- en 3D-printprojecten.
+The app is designed to help generate functional vase geometry with a strong focus on printability. Profile parameters, overhang limits, and material styling are all visible in the interface, so the model can be adjusted quickly before export.
+
+This makes it useful for:
+
+- decorative vase concepts
+- quick iteration on proportions
+- custom gifts and one-off pieces
+- maker lab experimentation with printable geometry
+
+## License
+
+This project is open source and intended for maker and 3D-print workflows.
 
 ## Credits
 
-Gemaakt voor een snelle en visuele workflow voor het ontwerpen van unieke 3D-printbare vazen.
+Built for fast, visual iteration in the design of custom 3D-printable vases.
