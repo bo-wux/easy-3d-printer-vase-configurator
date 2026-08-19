@@ -1,40 +1,47 @@
 # Easy 3D Printer Vase Configurator
 
-A browser-based design tool for creating custom, printable vase shapes for 3D printers. It lets you adjust the silhouette, surface pattern, printability constraints, and export the final model as an STL file directly from the app.
+<p align="center">
+  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white" alt="React 18" />
+  <img src="https://img.shields.io/badge/Three.js-170-FFFFFF?logo=three.js&logoColor=black" alt="Three.js" />
+  <img src="https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white" alt="Vite" />
+  <img src="https://img.shields.io/badge/STL-Export-4CAF50" alt="STL export" />
+</p>
+
+A polished web app for designing custom 3D printable vase shapes directly in the browser. Adjust the silhouette, surface pattern, twist, organic flow, and printability limits, then export the final model as an STL file ready for your 3D printer.
 
 <div align="center">
-  <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1000" />
+  <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1100" />
 </div>
 
-## Why this project exists
+## Why this project
 
-This project was built to make vase design faster and more visual for makers who want to iterate on shape, proportions, and printability without leaving the browser. Instead of manually editing geometry in CAD software, you can tweak parameters, preview the model in 3D, and export a ready-to-print result in a few clicks.
+This project was created to make custom vase design faster, more visual, and more approachable. Instead of jumping between CAD tools and print preparation workflows, you can iterate on shape, density, pattern, and stability in one place and export the final file without leaving the browser.
 
-## Highlights
+## What you can do
 
-- Real-time 3D preview of the vase as you edit it
-- Adjustable shape controls for height, base, opening, wall thickness, and more
-- Multiple style presets and pattern generations for unique results
-- Printability-aware settings to reduce overhang and improve stability
-- STL export directly from the browser for desktop or Bambu Lab workflows
-- Responsive UI for quick experimentation and iteration
+- Shape the vase with profile controls for height, opening, belly, shoulders, and wall thickness
+- Generate pattern styles like ribs, grooves, rings, facets, waves, and twist-based design
+- Apply organic deformation for more natural and artistic silhouettes
+- Tune printability constraints to reduce steep overhangs and improve stability
+- Preview the object in real time in a 3D viewer
+- Export the finished design as STL directly from the app
 
 ## Screenshots
 
 <div align="center">
-  <img src="screenshots/app-overview.png" alt="Main configurator view" width="900" />
+  <img src="screenshots/app-overview.png" alt="Main configurator overview" width="980" />
   <br /><br />
-  <img src="screenshots/viewer-detail.png" alt="3D viewer detail" width="900" />
+  <img src="screenshots/viewer-detail.png" alt="Detailed 3D vase viewer" width="980" />
 </div>
 
 ## Features
 
-- Custom vase profiles with variable proportions
-- Symmetrical pattern controls for ribs, grooves, rings, and twist effects
-- Organic deformation options for more natural-looking shapes
-- Visual print preview and material styling controls
-- Browser-based STL export without a backend
-- Optimized for maker workflows and small-batch 3D printing
+- Real-time 3D preview of the vase while editing
+- Multiple silhouette presets and custom control points
+- Symmetrical pattern generation for ribs, waves, grooves, stars, and rings
+- Organic styling with asymmetry, flow, and seed-based variation
+- Material and finish settings for a more realistic look
+- Browser-based STL export for maker workflows and quick production iterations
 
 ## Tech stack
 
@@ -59,7 +66,7 @@ cd easy-3d-printer-vase-configurator
 npm install
 ```
 
-3. Start the development server:
+3. Start the app in development mode:
 
 ```bash
 npm run dev
@@ -77,15 +84,16 @@ http://localhost:3000
 npm run build
 ```
 
-The optimized build output is generated in the `dist` folder.
+The build output is placed in the `dist` directory.
 
 ## How to use it
 
-- Adjust the basic silhouette using the sliders on the left
-- Switch between different vase types and design styles
-- Tune the pattern and organic deformation controls for a more custom look
-- Review the model in the 3D viewport and inspect it from multiple angles
-- Click the export button to download the generated STL for printing
+- Use the left-side controls to define the vase profile and proportions
+- Switch between silhouette presets to quickly explore different shapes
+- Fine-tune pattern, twist, and organic controls for a more unique design
+- Use printability settings to keep the structure more stable and printable
+- Rotate and zoom the model in the 3D viewer to inspect it from every angle
+- Click the export button to download the generated STL file
 
 ## Project structure
 
@@ -105,16 +113,16 @@ src/
 └── ...
 ```
 
-## Design and printing notes
+## Design notes
 
-The app is designed to help generate functional vase geometry with a strong focus on printability. Profile parameters, overhang limits, and material styling are all visible in the interface, so the model can be adjusted quickly before export.
+The geometry is generated with a parametric model tailored for 3D-printable vase forms. This means the vessel is built from a consistent profile, then refined with patterning and organic deformation while staying compatible with typical FDM printing constraints.
 
-This makes it useful for:
+It is especially useful for:
 
-- decorative vase concepts
-- quick iteration on proportions
-- custom gifts and one-off pieces
-- maker lab experimentation with printable geometry
+- decorative home objects
+- custom one-off gifts
+- small maker lab experiments
+- rapid exploration of printable bottle and vase forms
 
 ## License
 
@@ -122,4 +130,4 @@ This project is open source and intended for maker and 3D-print workflows.
 
 ## Credits
 
-Built for fast, visual iteration in the design of custom 3D-printable vases.
+Built for fast, visual iteration in the creation of elegant and functional custom 3D-printable vases.
