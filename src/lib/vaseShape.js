@@ -22,6 +22,7 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // Bambu Lab P1S: 256×256×256 bouwvolume, met marge tot de rand van de plaat
 export const PRINTER_LIMITS = {
+  bedSize: 256,
   maxHeight: 250,
   maxDiameter: 220,
   minDiameter: 20,
@@ -158,15 +159,6 @@ export const DEFAULT_SHAPE = {
   // golvende rand
   rimWaveCount: 0,
   rimWaveDepth: 6,
-  // gaten
-  holeMode: 'geen',
-  holeCols: 8,
-  holeRows: 3,
-  holeCount: 14,
-  holeSize: 40,
-  holeStagger: true,
-  holeStart: 25,
-  holeEnd: 80,
   // organisch
   seed: 1,
   organicAmount: 0,
@@ -268,66 +260,6 @@ export function createVaseShape(params) {
   // Golvende rand: de bovenrand zakt plaatselijk weg, totale hoogte blijft gelijk
   const rimCount = Math.round(p.rimWaveCount ?? 0);
   const rimAmp = rimCount >= 2 ? clamp((p.rimWaveDepth ?? 0) / 100, 0, 0.2) * height : 0;
-
-  // Gaten: lijst met cirkels in (booglengte, hoogte) in mm, zodat ze rond blijven.
-  // De band blijft weg van boven- en onderrand: rand en bodem blijven heel.
-  const holeMode = p.holeMode ?? 'geen';
-  const bandLo = clamp((p.holeStart ?? 25) / 100, 0.06, 0.88);
-  const bandHi = clamp((p.holeEnd ?? 80) / 100, bandLo + 0.06, 0.94);
-  const holes = [];
-  if (holeMode === 'raster' || holeMode === 'willekeurig') {
-    const bandH = (bandHi - bandLo) * height;
-    const maxR = Math.min(refRadius * 0.6, bandH / 2);
-    if (holeMode === 'raster') {
-      const cols = clamp(Math.round(p.holeCols ?? 8), 1, 40);
-      const rows = clamp(Math.round(p.holeRows ?? 3), 1, 30);
-      const cell = Math.min((TAU * refRadius) / cols, bandH / rows);
-      const rad = Math.min(maxR, clamp((p.holeSize ?? 45) / 100, 0.05, 0.95) * cell * 0.5);
-      for (let ri = 0; ri < rows; ri++) {
-        const shift = p.holeStagger !== false && ri % 2 ? 0.5 : 0;
-        for (let ci = 0; ci < cols; ci++) {
-          holes.push({
-            a: ((ci + shift) / cols) * TAU,
-            t: bandLo + ((ri + 0.5) / rows) * (bandHi - bandLo),
-            r: rad,
-          });
-        }
-      }
-    } else {
-      const rnd = mulberry32((Math.imul(seed, 0x27d4eb2d) ^ 0xa5f152c7) >>> 0);
-      const count = clamp(Math.round(p.holeCount ?? 12), 1, 60);
-      // maat volgt de gemiddelde ruimte per gat, zodat het aantal de vaas niet sloopt
-      const spacing = Math.sqrt((TAU * refRadius * bandH) / count);
-      const baseR = clamp((p.holeSize ?? 45) / 100, 0.03, 0.95) * spacing * 0.5;
-      for (let i = 0; i < count; i++) {
-        const rad = Math.min(maxR, baseR * (0.6 + 0.8 * rnd()));
-        const margin = rad / height;
-        holes.push({
-          a: rnd() * TAU,
-          t: clamp(bandLo + rnd() * (bandHi - bandLo), bandLo + margin, bandHi - margin),
-          r: rad,
-        });
-      }
-    }
-  }
-
-  const isHole = holes.length
-    ? (angle, t) => {
-        const y = t * height;
-        for (let i = 0; i < holes.length; i++) {
-          const h = holes[i];
-          const da = Math.atan2(Math.sin(angle - h.a), Math.cos(angle - h.a));
-          const dx = da * refRadius;
-          const dy = y - h.t * height;
-          if (dx * dx + dy * dy < h.r * h.r) return true;
-        }
-        return false;
-      }
-    : () => false;
-
-  const holeAreaFraction = holes.length
-    ? Math.min(1, holes.reduce((s, h) => s + Math.PI * h.r * h.r, 0) / (TAU * refRadius * height))
-    : 0;
 
   // Genormaliseerd naar [-1, 1]
   const organicField = (angle, t) => {
@@ -499,8 +431,7 @@ export function createVaseShape(params) {
       facetStrength > 0 ? facetCount * 48 : 0,
       organicAmount > 0 ? maxOrder * 40 : 0,
       bumpAmp !== 0 ? bumpCols * 28 : 0,
-      textureAmp > 0 ? textureCols * 8 : 0,
-      holes.length ? 320 : 0
+      textureAmp > 0 ? textureCols * 8 : 0
     ),
     128,
     512
@@ -510,7 +441,6 @@ export function createVaseShape(params) {
       80 + flow * detail * 12 + swayTurns * 30 + ringCount * 8 + Math.abs(p.twistAngle) / 12
         + (bumpAmp !== 0 ? bumpRows * 12 : 0)
         + (textureAmp > 0 ? textureRows * 6 : 0)
-        + (holes.length ? 180 : 0)
         + (rimAmp > 0 ? 40 : 0)
     ),
     80,
@@ -525,10 +455,6 @@ export function createVaseShape(params) {
     centerAt,
     heightAt,
     pointAt,
-    isHole,
-    hasHoles: holes.length > 0,
-    holeCount: holes.length,
-    holeAreaFraction,
     radialSegments,
     heightSegments,
     // printbaarheids-info voor de UI
@@ -601,13 +527,6 @@ export const DECOR_PRESETS = [
   { id: 'wild', label: '🔥 Wild', values: decor({ organicAmount: 28, organicDetail: 8, organicFlow: 150, swayAmount: 18, swayTurns: 1 }) },
 ];
 
-/** Gatenpatronen. */
-export const HOLE_MODES = [
-  { id: 'geen', label: '— Geen' },
-  { id: 'raster', label: '⊞ Symmetrisch raster' },
-  { id: 'willekeurig', label: '⁂ Willekeurig' },
-];
-
 export const randomSeed = () => Math.floor(Math.random() * 100000) + 1;
 
 /** Silhouet-verhoudingen omzetten naar echte diameters. */
@@ -673,14 +592,6 @@ export function randomVaseParams(rnd = Math.random) {
     organicDetail: 4,
     organicFlow: 60,
     swayTurns: 0.5,
-    holeMode: 'geen',
-    holeCols: 8,
-    holeRows: 3,
-    holeCount: 14,
-    holeSize: 45,
-    holeStagger: true,
-    holeStart: 25,
-    holeEnd: 80,
   };
 
   // Silhouet bijsturen tot het niet te steil overhangt
@@ -763,16 +674,6 @@ export function randomVaseParams(rnd = Math.random) {
   if (chance(0.15)) {
     out.rimWaveCount = pick([6, 8, 10, 12, 16]);
     out.rimWaveDepth = Math.round(range(4, 12));
-  }
-  if (chance(0.18)) {
-    out.holeMode = pick(['raster', 'raster', 'willekeurig']);
-    out.holeStart = Math.round(range(15, 35));
-    out.holeEnd = Math.round(range(65, 88));
-    out.holeSize = Math.round(range(30, 65));
-    out.holeCols = Math.round(range(5, 14));
-    out.holeRows = Math.round(range(2, 6));
-    out.holeCount = Math.round(range(6, 26));
-    out.holeStagger = chance(0.7);
   }
 
   return out;

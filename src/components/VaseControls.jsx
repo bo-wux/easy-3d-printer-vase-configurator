@@ -8,7 +8,6 @@ import {
   DECOR_PRESETS,
   PATTERN_SHAPES,
   TEXTURES,
-  HOLE_MODES,
   PRINTER_LIMITS,
 } from '../lib/vaseShape';
 import { FILAMENTS, FINISHES } from '../lib/filaments';
@@ -17,7 +16,6 @@ const TABS = [
   { id: 'vorm', label: '🏺 Vorm' },
   { id: 'patroon', label: '≣ Patroon' },
   { id: 'textuur', label: '⣿ Textuur' },
-  { id: 'gaten', label: '⊙ Gaten' },
   { id: 'organisch', label: '🌿 Organisch' },
   { id: 'print', label: '🖨️ Print' },
 ];
@@ -227,51 +225,6 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
                 value={params.rimWaveCount} onChange={onParamChange} hint="0 of 1 = rechte rand" />
               <Slider id="rimWaveDepth" label="Diepte" min={0} max={20} step={1} unit="%"
                 value={params.rimWaveDepth} onChange={onParamChange} hint="van de hoogte" />
-            </>
-          )}
-
-          {tab === 'gaten' && (
-            <>
-              <h3 className="section-title full">Gatenpatroon</h3>
-              <Chips
-                options={HOLE_MODES}
-                value={params.holeMode || 'geen'}
-                onSelect={(m) => onParamChange('holeMode', m.id)}
-              />
-              {params.holeMode === 'raster' && (
-                <>
-                  <Slider id="holeCols" label="Rondom" min={1} max={40} step={1}
-                    value={params.holeCols} onChange={onParamChange} />
-                  <Slider id="holeRows" label="Rijen" min={1} max={30} step={1}
-                    value={params.holeRows} onChange={onParamChange} />
-                  <Toggle label="Versprongen rijen" checked={params.holeStagger !== false}
-                    onChange={(v) => onParamChange('holeStagger', v)} />
-                </>
-              )}
-              {params.holeMode === 'willekeurig' && (
-                <Slider id="holeCount" label="Aantal" min={1} max={60} step={1}
-                  value={params.holeCount} onChange={onParamChange} hint="verdeling volgt de seed" />
-              )}
-              {params.holeMode !== 'geen' && (
-                <>
-                  <Slider id="holeSize" label="Grootte" min={5} max={95} step={1} unit="%"
-                    value={params.holeSize} onChange={onParamChange} />
-                  <Slider id="holeStart" label="Vanaf" min={6} max={88} step={1} unit="%"
-                    value={params.holeStart} onChange={onParamChange} />
-                  <Slider id="holeEnd" label="Tot" min={12} max={94} step={1} unit="%"
-                    value={params.holeEnd} onChange={onParamChange} />
-                  <div className="full info-box">
-                    <p>{shape.holeCount} gaten · {Math.round(shape.holeAreaFraction * 100)}% open oppervlak</p>
-                    <p className="muted">
-                      Gaten kunnen niet in vase mode: print met normale wanden (2 perimeters, 0% infill,
-                      met top/bottom uit). Bodem en rand blijven altijd dicht.
-                    </p>
-                    {shape.holeAreaFraction > 0.35 && (
-                      <p className="warn">⚠️ Veel open oppervlak — de vaas wordt fragiel.</p>
-                    )}
-                  </div>
-                </>
-              )}
             </>
           )}
 

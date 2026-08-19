@@ -2,15 +2,15 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
-import { createVaseShape } from '../lib/vaseShape';
+import { createVaseShape, PRINTER_LIMITS } from '../lib/vaseShape';
 import { getFilament, getFinish } from '../lib/filaments';
 
 const TAU = Math.PI * 2;
+const BED = PRINTER_LIMITS.bedSize;
 
 /**
  * Watertight vaas-mesh. Buiten- en binnenwand zijn hetzelfde raster met een
- * radiale offset; gaten worden gemaakt door cellen over te slaan en de randen
- * tussen buiten- en binnenwand dicht te naaien.
+ * radiale offset, verbonden door de bovenrand en een massieve bodem.
  */
 const createVaseGeometry = (params) => {
   const shape = createVaseShape(params);
@@ -42,54 +42,14 @@ const createVaseGeometry = (params) => {
   const O = (i, j) => i * ring + j;
   const I = (i, j) => innerStart + i * ring + j;
 
-  // Gatenmasker per cel; de onderste en bovenste rij blijven altijd dicht
-  const solid = new Uint8Array(hs * rs).fill(1);
-  if (shape.hasHoles) {
-    for (let i = 1; i < hs - 1; i++) {
-      const t = (i + 0.5) / hs;
-      for (let j = 0; j < rs; j++) {
-        if (shape.isHole(((j + 0.5) / rs) * TAU, t)) solid[i * rs + j] = 0;
-      }
-    }
-  }
-  const isSolid = (i, j) => {
-    // buiten het raster sluiten de bodem en de bovenrand de mesh al af
-    if (i < 0 || i >= hs) return true;
-    return solid[i * rs + ((j % rs) + rs) % rs] === 1;
-  };
-
   for (let i = 0; i < hs; i++) {
     for (let j = 0; j < rs; j++) {
-      if (!isSolid(i, j)) continue;
-
       // buitenwand
       indices.push(O(i, j), O(i + 1, j), O(i, j + 1));
       indices.push(O(i, j + 1), O(i + 1, j), O(i + 1, j + 1));
       // binnenwand (omgekeerde winding)
       indices.push(I(i, j), I(i, j + 1), I(i + 1, j));
       indices.push(I(i, j + 1), I(i + 1, j + 1), I(i + 1, j));
-
-      if (!shape.hasHoles) continue;
-
-      // Randen naar een gat toe dichtnaaien
-      if (!isSolid(i + 1, j)) {
-        const r = i + 1;
-        indices.push(I(r, j), I(r, j + 1), O(r, j + 1));
-        indices.push(I(r, j), O(r, j + 1), O(r, j));
-      }
-      if (!isSolid(i - 1, j)) {
-        indices.push(I(i, j), O(i, j + 1), I(i, j + 1));
-        indices.push(I(i, j), O(i, j), O(i, j + 1));
-      }
-      if (!isSolid(i, j + 1)) {
-        const c = j + 1;
-        indices.push(O(i, c), O(i + 1, c), I(i + 1, c));
-        indices.push(O(i, c), I(i + 1, c), I(i, c));
-      }
-      if (!isSolid(i, j - 1)) {
-        indices.push(O(i, j), I(i + 1, j), O(i + 1, j));
-        indices.push(O(i, j), I(i, j), I(i + 1, j));
-      }
     }
   }
 
@@ -176,8 +136,6 @@ const VaseMesh = ({ params, onMeshCreated }) => {
     params.bumpCols, params.bumpRows, params.bumpDepth, params.bumpStagger,
     params.textureType, params.textureScale, params.textureDepth,
     params.rimWaveCount, params.rimWaveDepth,
-    params.holeMode, params.holeCols, params.holeRows, params.holeCount,
-    params.holeSize, params.holeStagger, params.holeStart, params.holeEnd,
     params.seed, params.organicAmount, params.organicDetail, params.organicFlow,
     params.swayAmount, params.swayTurns, params.autoLimit, params.maxOverhang,
   ]);
@@ -309,14 +267,13 @@ const VaseViewer = ({ params, onMeshCreated, onCaptureReady }) => {
 
       {params.showGrid !== false && (
         <>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]} receiveShadow>
-            <circleGeometry args={[Math.max(maxDiameter * 1.8, 130), 96]} />
-            <meshStandardMaterial color="#0f1218" roughness={1} metalness={0} />
+          {/* Bambu Lab P1S buildplate: 256 × 256mm, raster van 16mm.
+              Basic material: de plaat blijft zo egaal donker, ongeacht de studio-belichting. */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.4, 0]}>
+            <planeGeometry args={[BED, BED]} />
+            <meshBasicMaterial color="#151b28" />
           </mesh>
-          <gridHelper
-            args={[Math.max(maxDiameter * 3.2, 240), 24, '#3a4356', '#2a3140']}
-            position={[0, -0.3, 0]}
-          />
+          <gridHelper args={[BED, BED / 16, '#3f4a61', '#28303e']} position={[0, -0.3, 0]} />
         </>
       )}
 
