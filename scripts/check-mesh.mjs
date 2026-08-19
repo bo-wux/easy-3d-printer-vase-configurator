@@ -1,5 +1,5 @@
 import { buildVaseMesh } from '../src/lib/vaseMesh.js';
-import { DEFAULT_SHAPE, randomVaseParams } from '../src/lib/vaseShape.js';
+import { DEFAULT_SHAPE, randomVaseParams, SECTION_PRESETS } from '../src/lib/vaseShape.js';
 
 const check = (label, params, opts = {}) => {
   const { positions, indices } = buildVaseMesh(params, opts);
@@ -58,3 +58,9 @@ check('solid', { ...DEFAULT_SHAPE }, { solid: true });
 check('solid bobbel', { ...DEFAULT_SHAPE, bumpCols: 12, bumpRows: 8, bumpDepth: 12 }, { solid: true });
 check('solid rim', { ...DEFAULT_SHAPE, rimWaveCount: 8, rimWaveDepth: 12 }, { solid: true });
 for (let i = 0; i < 3; i++) check('solid rnd ' + i, randomVaseParams(), { solid: true });
+
+for (const preset of SECTION_PRESETS) {
+  check('sec ' + preset.id, { ...DEFAULT_SHAPE, section: preset.make() });
+}
+check('sec+bobbel', { ...DEFAULT_SHAPE, section: SECTION_PRESETS[3].make(), bumpCols: 10, bumpRows: 8, bumpDepth: 8 });
+check('sec solid', { ...DEFAULT_SHAPE, section: SECTION_PRESETS[3].make() }, { solid: true });

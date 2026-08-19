@@ -52,7 +52,7 @@ const VaseMesh = ({ params, onMeshCreated }) => {
   const meshRef = useRef();
 
   const geometry = useMemo(() => createVaseGeometry(params), [
-    params.height, params.thickness, params.profile, params.layerHeight,
+    params.height, params.thickness, params.profile, params.layerHeight, params.section,
     params.patternShape, params.waveCount, params.waveAmplitude,
     params.twistAngle, params.twistMode, params.twistWaves,
     params.facetCount, params.facetStrength, params.ringCount, params.ringAmount,

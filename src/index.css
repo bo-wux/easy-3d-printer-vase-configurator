@@ -375,6 +375,43 @@ body {
   stroke: #fff;
 }
 
+.section-editor {
+  display: block;
+  width: 100%;
+  height: 190px;
+  touch-action: none;
+}
+
+.section-guide {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.section-shape {
+  fill: rgba(122, 162, 255, 0.16);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.section-node {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.section-node:hover {
+  fill: var(--accent);
+}
+
+.section-node.active {
+  fill: var(--accent-2);
+  stroke: #fff;
+}
+
 /* ---------- filament swatches ---------- */
 
 .swatch-row {

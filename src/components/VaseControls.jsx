@@ -8,7 +8,11 @@ import {
   profilePoints,
   profileRadiusAt,
   maxProfileDiameter,
+  normalizeSection,
+  sectionSignature,
+  SECTION_PRESETS,
   MIN_NODE_GAP,
+  MIN_SECTION_GAP,
   SILHOUETTES,
   DECOR_PRESETS,
   PATTERN_SHAPES,
@@ -17,9 +21,11 @@ import {
 } from '../lib/vaseShape';
 import { FILAMENTS, FINISHES } from '../lib/filaments';
 import ProfileEditor from './ProfileEditor';
+import SectionEditor from './SectionEditor';
 
 const TABS = [
   { id: 'vorm', label: '🏺 Vorm' },
+  { id: 'doorsnede', label: '⬡ Doorsnede' },
   { id: 'patroon', label: '≣ Patroon' },
   { id: 'textuur', label: '⣿ Textuur' },
   { id: 'organisch', label: '🌿 Organisch' },
@@ -119,6 +125,49 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
     if (isEnd || profile.length <= 2) return;
     setProfile(profile.filter((_, i) => i !== active), Math.max(1, active - 1));
   };
+
+  const section = useMemo(() => normalizeSection(params.section), [params.section]);
+  const [corner, setCorner] = useState(0);
+  const nodes = section || [];
+  const cornerIndex = nodes.length ? Math.min(corner, nodes.length - 1) : 0;
+  const cornerNode = nodes[cornerIndex];
+  const wrap = (v) => ((v % 1) + 1) % 1;
+
+  const setSection = (next, keepAngle = null) => {
+    const clean = normalizeSection(next);
+    onParamChange('section', clean);
+    if (clean && keepAngle !== null) {
+      const at = clean.findIndex((pt) => Math.abs(pt.a - keepAngle) < 1e-9);
+      setCorner(at < 0 ? 0 : at);
+    }
+  };
+
+  // hoek blijft tussen de buren: zo houdt de volgorde — en dus de selectie — stand
+  const moveCorner = (index, patch) => {
+    const n = nodes.length;
+    const cur = nodes[index];
+    let a = cur.a;
+    if (patch.a !== undefined && n > 2) {
+      const prev = nodes[(index - 1 + n) % n].a;
+      const span = wrap(nodes[(index + 1) % n].a - prev);
+      const room = span - MIN_SECTION_GAP;
+      a = room > MIN_SECTION_GAP
+        ? wrap(prev + Math.min(room, Math.max(MIN_SECTION_GAP, wrap(patch.a - prev))))
+        : cur.a;
+    }
+    const next = nodes.map((pt, i) => (i === index ? { ...pt, ...patch, a } : pt));
+    setSection(next, a);
+  };
+
+  const addCorner = (at) => {
+    const base = nodes.length ? nodes : (SECTION_PRESETS.find((s) => s.id === 'vrij').make());
+    setSection([...base, { a: at.a, r: at.r, sharp: false }], at.a);
+  };
+
+  const removeCorner = () => {
+    if (nodes.length <= 3) return;
+    setSection(nodes.filter((_, i) => i !== cornerIndex), nodes[(cornerIndex + 1) % nodes.length].a);
+  };
   const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
   const layers = Math.ceil(params.height / params.layerHeight);
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
@@ -208,6 +257,63 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
                   − Punt wissen
                 </button>
               </div>
+            </>
+          )}
+
+          {tab === 'doorsnede' && (
+            <>
+              <h3 className="section-title full">Vorm van bovenaf</h3>
+              <Chips
+                options={SECTION_PRESETS}
+                onSelect={(preset) => {
+                  onParamChange('section', normalizeSection(preset.make()));
+                  setCorner(0);
+                }}
+                compare={(preset) => sectionSignature(preset.make()) === sectionSignature(params.section)}
+              />
+              <div className="full profile-panel">
+                <SectionEditor
+                  section={section}
+                  selected={cornerIndex}
+                  onSelect={setCorner}
+                  onMove={moveCorner}
+                  onAdd={addCorner}
+                />
+                <p className="control-hint">
+                  {section
+                    ? 'Sleep een punt · dubbelklik voor een punt erbij · vierkantjes zijn hoeken'
+                    : 'Rond. Kies een vorm of dubbelklik om zelf te tekenen.'}
+                </p>
+              </div>
+              {cornerNode && (
+                <>
+                  <Slider id="cornerAngle" label={`Punt ${cornerIndex + 1} van ${nodes.length}`} min={0} max={359} step={1} unit="°"
+                    value={Math.round(cornerNode.a * 360)}
+                    onChange={(_, v) => moveCorner(cornerIndex, { a: Number(v) / 360 })} />
+                  <Slider id="cornerRadius" label="Straal" min={25} max={100} step={1} unit="%"
+                    value={Math.round(cornerNode.r * 100)}
+                    onChange={(_, v) => moveCorner(cornerIndex, { r: Number(v) / 100 })} />
+                  <Toggle label="Hoekig (rechte zijden)" checked={!!cornerNode.sharp}
+                    onChange={(v) => moveCorner(cornerIndex, { sharp: v })} full />
+                  <div className="full chip-row">
+                    <button type="button" className="chip"
+                      onClick={() => setSection(nodes.map((pt) => ({ ...pt, sharp: true })))}>
+                      Alles hoekig
+                    </button>
+                    <button type="button" className="chip"
+                      onClick={() => setSection(nodes.map((pt) => ({ ...pt, sharp: false })))}>
+                      Alles rond
+                    </button>
+                    <button type="button" className="chip" onClick={removeCorner} disabled={nodes.length <= 3}>
+                      − Punt wissen
+                    </button>
+                  </div>
+                  <p className="control-hint full">
+                    De grootste straal is altijd de diameter uit het silhouet, dus de vaas blijft
+                    even breed als je hem instelt.
+                  </p>
+                </>
+              )}
             </>
           )}
 

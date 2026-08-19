@@ -179,6 +179,137 @@ export function profileRadiusAt(points, t) {
 
 export const maxProfileDiameter = (p) => profilePoints(p).reduce((m, pt) => Math.max(m, pt.d), 0);
 
+/** Minimale hoekafstand tussen twee punten van de doorsnede (fractie van een rondje). */
+export const MIN_SECTION_GAP = 0.02;
+const SECTION_BINS = 720;
+
+/**
+ * Doorsnede opschonen: op hoek gesorteerd, minimale tussenruimte, en de
+ * grootste straal is altijd 1 zodat de diameters uit het silhouet blijven kloppen.
+ * Minder dan 3 punten = gewoon rond.
+ */
+export function normalizeSection(points) {
+  if (!Array.isArray(points)) return null;
+  const list = points
+    .filter((pt) => pt && Number.isFinite(pt.a) && Number.isFinite(pt.r))
+    .map((pt) => ({ a: ((pt.a % 1) + 1) % 1, r: clamp(pt.r, 0.25, 1), sharp: !!pt.sharp }))
+    .sort((x, y) => x.a - y.a);
+  const kept = [];
+  list.forEach((pt) => {
+    if (!kept.length) { kept.push(pt); return; }
+    if (pt.a - kept[kept.length - 1].a >= MIN_SECTION_GAP && 1 - pt.a + kept[0].a >= MIN_SECTION_GAP) {
+      kept.push(pt);
+    }
+  });
+  if (kept.length < 3) return null;
+  const max = kept.reduce((m, pt) => Math.max(m, pt.r), 0);
+  return kept.map((pt) => ({ ...pt, r: pt.r / max }));
+}
+
+/**
+ * Straal per hoek voor de doorsnede, als vloeiende gesloten curve door de
+ * punten (Catmull-Rom). Bij een punt dat als hoek is gemarkeerd loopt de
+ * raaklijn langs de koorde, waardoor er een echte hoek en een rechte zijde
+ * ontstaat — zo wordt vier hoekpunten precies een vierkant.
+ * Geeft null terug voor rond.
+ */
+export function buildSectionField(points) {
+  const pts = normalizeSection(points);
+  if (!pts) return null;
+  const n = pts.length;
+  const P = pts.map((pt) => ({ x: Math.cos(pt.a * TAU) * pt.r, y: Math.sin(pt.a * TAU) * pt.r }));
+  const tangent = (i, forward) => {
+    const cur = P[i];
+    const prev = P[(i - 1 + n) % n];
+    const next = P[(i + 1) % n];
+    const from = pts[i].sharp ? (forward ? cur : prev) : prev;
+    const to = pts[i].sharp ? (forward ? next : cur) : next;
+    return { x: (to.x - from.x) * 0.5, y: (to.y - from.y) * 0.5 };
+  };
+
+  const table = new Float64Array(SECTION_BINS).fill(-1);
+  const steps = Math.ceil((SECTION_BINS * 2) / n);
+  for (let i = 0; i < n; i++) {
+    const p0 = P[i];
+    const p1 = P[(i + 1) % n];
+    const m0 = tangent(i, true);
+    const m1 = tangent((i + 1) % n, false);
+    for (let s = 0; s < steps; s++) {
+      const u = s / steps;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      const h00 = 2 * u3 - 3 * u2 + 1;
+      const h10 = u3 - 2 * u2 + u;
+      const h01 = -2 * u3 + 3 * u2;
+      const h11 = u3 - u2;
+      const x = h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x;
+      const y = h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y;
+      const bin = ((Math.round((Math.atan2(y, x) / TAU) * SECTION_BINS) % SECTION_BINS) + SECTION_BINS) % SECTION_BINS;
+      table[bin] = Math.hypot(x, y);
+    }
+  }
+
+  // gaten opvullen tussen de bemonsterde hoeken
+  let last = -1;
+  for (let i = 0; i < SECTION_BINS && last < 0; i++) if (table[i] >= 0) last = i;
+  for (let k = 1; k <= SECTION_BINS; k++) {
+    const i = (last + k) % SECTION_BINS;
+    if (table[i] >= 0) { last = i; continue; }
+    let next = i;
+    let gap = 1;
+    while (table[next] < 0 && gap <= SECTION_BINS) { next = (next + 1) % SECTION_BINS; gap++; }
+    const a = table[last];
+    const b = table[next];
+    table[i] = a + (b - a) * (1 / gap);
+  }
+
+  const at = (angle) => {
+    const x = (angle / TAU) * SECTION_BINS;
+    const i = Math.floor(x);
+    const f = x - i;
+    const lo = table[((i % SECTION_BINS) + SECTION_BINS) % SECTION_BINS];
+    const hi = table[(((i + 1) % SECTION_BINS) + SECTION_BINS) % SECTION_BINS];
+    return lo + (hi - lo) * f;
+  };
+
+  return { at, points: pts, hasCorners: pts.some((pt) => pt.sharp) };
+}
+
+const polySection = (n, sharp = true, inner = 1) => {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({ a: i / n, r: 1, sharp });
+    if (inner < 1) out.push({ a: (i + 0.5) / n, r: inner, sharp });
+  }
+  return out;
+};
+
+export const SECTION_PRESETS = [
+  { id: 'rond', label: '○ Rond', make: () => null },
+  { id: 'ovaal', label: '⬭ Ovaal', make: () => [
+    { a: 0, r: 1 }, { a: 0.25, r: 0.68 }, { a: 0.5, r: 1 }, { a: 0.75, r: 0.68 },
+  ] },
+  { id: 'driehoek', label: '△ Driehoek', make: () => polySection(3) },
+  { id: 'vierkant', label: '◻ Vierkant', make: () => polySection(4) },
+  { id: 'vijfhoek', label: '⬠ Vijfhoek', make: () => polySection(5) },
+  { id: 'zeshoek', label: '⬡ Zeshoek', make: () => polySection(6) },
+  { id: 'achthoek', label: '⯃ Achthoek', make: () => polySection(8) },
+  { id: 'ster', label: '✦ Ster', make: () => polySection(6, true, 0.55) },
+  { id: 'bloem', label: '❀ Bloem', make: () => polySection(6, false, 0.72) },
+  { id: 'lob', label: '❍ Lobben', make: () => polySection(3, false, 0.62) },
+  { id: 'vrij', label: '✎ Vrij tekenen', make: () => polySection(8, false) },
+];
+
+/** Vingerafdruk van een doorsnede, om te zien welke preset actief is. */
+export const sectionSignature = (list) => {
+  const clean = normalizeSection(list);
+  if (!clean) return 'rond';
+  return clean.map((pt) => `${pt.a.toFixed(3)}:${pt.r.toFixed(3)}:${pt.sharp ? 1 : 0}`).join('|');
+};
+
+/** Doorsnede van een ontwerp, of null als hij rond is. */
+export const sectionOf = (p) => normalizeSection(p?.section);
+
 export const DEFAULT_SHAPE = {
   // silhouet: controlepunten van bodem (t 0) naar opening (t 1)
   height: 180,
@@ -188,6 +319,8 @@ export const DEFAULT_SHAPE = {
     { t: 0.7, d: 78 },
     { t: 1, d: 62 },
   ],
+  // dwarsdoorsnede: null = rond, anders punten {a, r, sharp}
+  section: null,
   // 1.2mm = 3 lijnen van 0.4mm: stevig en waterdicht, ook zonder vase mode
   thickness: 1.2,
   // symmetrisch patroon
@@ -232,6 +365,7 @@ export function createVaseShape(params) {
 
   const nodes = profilePoints(p);
   const baseRadiusAt = (t) => profileRadiusAt(nodes, t);
+  const section = buildSectionField(p.section);
 
   const refRadius = baseRadiusAt(0.5);
   const twistRad = (p.twistAngle / 180) * Math.PI;
@@ -377,8 +511,9 @@ export function createVaseShape(params) {
 
   // scale schaalt alleen de decoratie, nooit het basisprofiel
   const radiusRaw = (angle, t, scale, fade = true) => {
-    const base = baseRadiusAt(t);
     const a = angle - rotAt(t); // twist draait het hele patroon mee omhoog
+    // de doorsnede draait mee met de twist, anders staat de vorm los van het patroon
+    const base = baseRadiusAt(t) * (section ? section.at(a) : 1);
     if (fade) scale *= groundFade(t);
 
     let factor = 1;
@@ -493,7 +628,9 @@ export function createVaseShape(params) {
       facetStrength > 0 ? facetCount * 48 : 0,
       organicAmount > 0 ? maxOrder * 40 : 0,
       bumpAmp !== 0 ? bumpCols * 28 : 0,
-      textureAmp > 0 ? textureCols * 8 : 0
+      textureAmp > 0 ? textureCols * 8 : 0,
+      // scherpe hoeken in de doorsnede hebben veel segmenten nodig om hoek te blijven
+      section ? (section.hasCorners ? 512 : 256) : 0
     ),
     128,
     512
@@ -655,6 +792,7 @@ export function randomVaseParams(rnd = Math.random) {
     seed: randomSeed(),
     // alles uit; de gekozen stijl zet hieronder aan wat nodig is
     ...NO_DECOR,
+    section: null,
     facetStrength: 0,
     ringAmount: 0,
     bumpDepth: 0,
@@ -669,6 +807,14 @@ export function randomVaseParams(rnd = Math.random) {
     if (createVaseShape(out).baseOverhangDeg <= out.maxOverhang) break;
     const mean = out.profile.reduce((s, pt) => s + pt.d, 0) / out.profile.length;
     out.profile = out.profile.map((pt) => ({ ...pt, d: Math.round(mean + (pt.d - mean) * 0.85) }));
+  }
+
+  // Doorsnede: meestal rond, soms een veelhoek of lobben voor een strakker karakter
+  if (chance(0.28)) {
+    const sides = pick([3, 4, 4, 5, 6, 6, 8]);
+    const sharp = chance(0.6);
+    const inner = chance(0.35) ? range(0.55, 0.8) : 1;
+    out.section = normalizeSection(polySection(sides, sharp, inner));
   }
 
   const refRadius = createVaseShape(out).baseRadiusAt(0.5);
