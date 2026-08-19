@@ -1,0 +1,82 @@
+═══════════════════════════════════════════════════════════════
+  🏺 3D VASE CONFIGURATOR - QUICK START GUIDE
+═══════════════════════════════════════════════════════════════
+
+✅ INSTALLATIE VOLTOOID!
+
+De applicatie is klaar voor gebruik. Volg deze stappen:
+
+═══════════════════════════════════════════════════════════════
+📋 STAPPEN OM TE STARTEN:
+═══════════════════════════════════════════════════════════════
+
+1. Open een terminal in deze folder
+
+2. Start de development server:
+   
+   npm run dev
+
+3. De applicatie opent automatisch in je browser op:
+   
+   http://localhost:3000
+
+═══════════════════════════════════════════════════════════════
+🎮 HOE TE GEBRUIKEN:
+═══════════════════════════════════════════════════════════════
+
+▸ SLIDERS (Links):
+  - Hoogte: Verticale schaal (50-300mm)
+  - Diameter: Breedte van de vaas (50-200mm)
+  - Wanddikte: Dikte voor 3D printing (0.4-4.0mm)
+  - Twist: Draai-effect voor coole look (0-360°)
+
+▸ 3D VIEW (Rechts):
+  - SLEEP met muis = Roteren
+  - SCROLL = Zoom in/uit
+  - RECHTERMUISKNOP + SLEEP = Pan
+
+▸ EXPORTEREN:
+  - Klik "Download .STL for 3D Printing"
+  - Bestand wordt automatisch gedownload
+  - Open in je slicer software (Cura, PrusaSlicer, etc.)
+  - Print!
+
+═══════════════════════════════════════════════════════════════
+🛠️ ANDERE COMMANDO'S:
+═══════════════════════════════════════════════════════════════
+
+• Productie build maken:
+  npm run build
+  
+• Preview van productie build:
+  npm run preview
+  
+• Dependencies opnieuw installeren:
+  npm install
+
+═══════════════════════════════════════════════════════════════
+💡 TIPS & TRICKS:
+═══════════════════════════════════════════════════════════════
+
+• Voor stabiele prints: gebruik wanddikte ≥ 1.2mm
+• Voor snelle prints: gebruik twist = 0 (minder complex)
+• Voor artistieke prints: experiment met twist 45-180°
+• Print met "vase mode" in je slicer voor één continue lijn
+• Hoogte/diameter ratio van 1.5:1 geeft mooie proporties
+
+═══════════════════════════════════════════════════════════════
+🐛 PROBLEMEN?
+═══════════════════════════════════════════════════════════════
+
+• Browser refresh niet genoeg? Doe: Ctrl+Shift+R
+• Port 3000 bezet? Wijzig in vite.config.js
+• STL download werkt niet? Check console (F12)
+• Performance issues? Gebruik Chrome of Edge
+
+═══════════════════════════════════════════════════════════════
+
+Veel plezier met ontwerpen! 🚀
+
+- MakerLab Team
+
+═══════════════════════════════════════════════════════════════
