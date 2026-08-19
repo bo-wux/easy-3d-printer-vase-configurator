@@ -66,6 +66,20 @@ export const PATTERN_SHAPES = [
   { id: 'groef', label: 'Groef' },
   { id: 'ster', label: 'Ster' },
   { id: 'paneel', label: 'Paneel' },
+  { id: 'zaag', label: 'Zaag' },
+  { id: 'punt', label: 'Punt' },
+  { id: 'kabel', label: 'Kabel' },
+];
+
+// Fijne oppervlaktetexturen (bovenop het patroon)
+export const TEXTURES = [
+  { id: 'geen', label: '— Geen' },
+  { id: 'lijnen', label: '⋮ Fijne lijnen' },
+  { id: 'ruit', label: '◆ Ruit' },
+  { id: 'noppen', label: '⣿ Noppen' },
+  { id: 'schub', label: '🐟 Schubben' },
+  { id: 'geweven', label: '▦ Geweven' },
+  { id: 'grof', label: '▨ Ruw' },
 ];
 
 // Alle profielen leveren een waarde in [-1, 1]
@@ -80,11 +94,20 @@ function patternProfile(shape, phase) {
       return (2 / Math.PI) * Math.asin(clamp(s, -1, 1));
     case 'paneel': // vlakke panelen met zachte overgang
       return Math.tanh(3 * s) / Math.tanh(3);
+    case 'zaag': // zaagtand: steile flank, zachte helling
+      return 2 * ((((phase / TAU) % 1) + 1) % 1) - 1;
+    case 'punt': // smalle scherpe richels
+      return 2 * Math.pow(Math.abs(Math.sin(phase / 2)), 4) - 1;
+    case 'kabel': // touw/kabel: dubbele lob per herhaling
+      return clamp(0.78 * s + 0.28 * Math.sin(2 * phase + 1.2), -1, 1);
     case 'golf':
     default:
       return s;
   }
 }
+
+// Ronde bult in een raster-cel; u en v lopen van -1..1 rond het midden
+const blob = (u, v, sharp) => Math.pow(Math.max(0, u), sharp) * Math.pow(Math.max(0, v), sharp);
 
 /**
  * Max. relatieve amplitude voor een patroon met n herhalingen.
@@ -102,7 +125,8 @@ function safeAmplitudeFraction(n, radius, wall) {
 export const DEFAULT_SHAPE = {
   // silhouet
   height: 180,
-  thickness: 0.8,
+  // 1.2mm = 3 lijnen van 0.4mm: stevig en waterdicht, ook zonder vase mode
+  thickness: 1.2,
   diameterBottom: 55,
   useLow: true,
   diameterLow: 88,
@@ -116,10 +140,33 @@ export const DEFAULT_SHAPE = {
   waveCount: 16,
   waveAmplitude: 4,
   twistAngle: 0,
+  twistMode: 'lineair',
+  twistWaves: 1,
   facetCount: 0,
   facetStrength: 60,
   ringCount: 0,
   ringAmount: 4,
+  // bobbels (symmetrisch raster)
+  bumpCols: 0,
+  bumpRows: 8,
+  bumpDepth: 6,
+  bumpStagger: true,
+  // fijne textuur
+  textureType: 'geen',
+  textureScale: 24,
+  textureDepth: 3,
+  // golvende rand
+  rimWaveCount: 0,
+  rimWaveDepth: 6,
+  // gaten
+  holeMode: 'geen',
+  holeCols: 8,
+  holeRows: 3,
+  holeCount: 14,
+  holeSize: 40,
+  holeStagger: true,
+  holeStart: 25,
+  holeEnd: 80,
   // organisch
   seed: 1,
   organicAmount: 0,
@@ -160,6 +207,11 @@ export function createVaseShape(params) {
 
   const refRadius = baseRadiusAt(0.5);
   const twistRad = (p.twistAngle / 180) * Math.PI;
+  const twistWaves = clamp(p.twistWaves ?? 1, 0.25, 4);
+  // 'heen' draait omhoog en weer terug -> torsie die zichzelf opheft
+  const rotAt = (t) => (p.twistMode === 'heen'
+    ? twistRad * Math.sin(Math.PI * twistWaves * t)
+    : twistRad * t);
 
   // Patroon: n-tallige rotatiesymmetrie
   const waveCount = Math.round(p.waveCount);
@@ -177,6 +229,26 @@ export function createVaseShape(params) {
   const ringCount = Math.round(p.ringCount);
   const ringAmount = ringCount > 0 ? Math.max(0, p.ringAmount) / 100 : 0;
 
+  // Bobbels: raster van symmetrische bollen (negatieve diepte = deuken)
+  const bumpCols = Math.round(p.bumpCols ?? 0);
+  const bumpRows = clamp(Math.round(p.bumpRows ?? 1), 1, 40);
+  const bumpDepth = p.bumpDepth ?? 0;
+  const bumpAmp = bumpCols >= 1 && bumpDepth !== 0
+    ? Math.sign(bumpDepth) * Math.min(
+        Math.abs(bumpDepth) / 100,
+        safeAmplitudeFraction(Math.max(bumpCols, bumpRows), refRadius, wall)
+      )
+    : 0;
+
+  // Fijne oppervlaktetextuur
+  const textureType = p.textureType ?? 'geen';
+  const textureCols = clamp(Math.round(p.textureScale ?? 24), 4, 64);
+  // verticale herhaling zo gekozen dat de cellen ongeveer vierkant blijven
+  const textureRows = clamp(Math.round((textureCols * height) / (TAU * refRadius)), 1, 90);
+  const textureAmp = textureType !== 'geen' && p.textureDepth > 0
+    ? Math.min(p.textureDepth / 100, safeAmplitudeFraction(textureCols, refRadius, wall))
+    : 0;
+
   // Organisch (asymmetrisch)
   const detail = clamp(Math.round(p.organicDetail), 1, 10);
   const maxOrder = 1 + detail;
@@ -193,10 +265,74 @@ export function createVaseShape(params) {
   const swayTurns = p.swayTurns;
   const swayPhase = mulberry32(Math.imul(seed, 0x9e3779b9) >>> 0)() * TAU;
 
+  // Golvende rand: de bovenrand zakt plaatselijk weg, totale hoogte blijft gelijk
+  const rimCount = Math.round(p.rimWaveCount ?? 0);
+  const rimAmp = rimCount >= 2 ? clamp((p.rimWaveDepth ?? 0) / 100, 0, 0.2) * height : 0;
+
+  // Gaten: lijst met cirkels in (booglengte, hoogte) in mm, zodat ze rond blijven.
+  // De band blijft weg van boven- en onderrand: rand en bodem blijven heel.
+  const holeMode = p.holeMode ?? 'geen';
+  const bandLo = clamp((p.holeStart ?? 25) / 100, 0.06, 0.88);
+  const bandHi = clamp((p.holeEnd ?? 80) / 100, bandLo + 0.06, 0.94);
+  const holes = [];
+  if (holeMode === 'raster' || holeMode === 'willekeurig') {
+    const bandH = (bandHi - bandLo) * height;
+    const maxR = Math.min(refRadius * 0.6, bandH / 2);
+    if (holeMode === 'raster') {
+      const cols = clamp(Math.round(p.holeCols ?? 8), 1, 40);
+      const rows = clamp(Math.round(p.holeRows ?? 3), 1, 30);
+      const cell = Math.min((TAU * refRadius) / cols, bandH / rows);
+      const rad = Math.min(maxR, clamp((p.holeSize ?? 45) / 100, 0.05, 0.95) * cell * 0.5);
+      for (let ri = 0; ri < rows; ri++) {
+        const shift = p.holeStagger !== false && ri % 2 ? 0.5 : 0;
+        for (let ci = 0; ci < cols; ci++) {
+          holes.push({
+            a: ((ci + shift) / cols) * TAU,
+            t: bandLo + ((ri + 0.5) / rows) * (bandHi - bandLo),
+            r: rad,
+          });
+        }
+      }
+    } else {
+      const rnd = mulberry32((Math.imul(seed, 0x27d4eb2d) ^ 0xa5f152c7) >>> 0);
+      const count = clamp(Math.round(p.holeCount ?? 12), 1, 60);
+      // maat volgt de gemiddelde ruimte per gat, zodat het aantal de vaas niet sloopt
+      const spacing = Math.sqrt((TAU * refRadius * bandH) / count);
+      const baseR = clamp((p.holeSize ?? 45) / 100, 0.03, 0.95) * spacing * 0.5;
+      for (let i = 0; i < count; i++) {
+        const rad = Math.min(maxR, baseR * (0.6 + 0.8 * rnd()));
+        const margin = rad / height;
+        holes.push({
+          a: rnd() * TAU,
+          t: clamp(bandLo + rnd() * (bandHi - bandLo), bandLo + margin, bandHi - margin),
+          r: rad,
+        });
+      }
+    }
+  }
+
+  const isHole = holes.length
+    ? (angle, t) => {
+        const y = t * height;
+        for (let i = 0; i < holes.length; i++) {
+          const h = holes[i];
+          const da = Math.atan2(Math.sin(angle - h.a), Math.cos(angle - h.a));
+          const dx = da * refRadius;
+          const dy = y - h.t * height;
+          if (dx * dx + dy * dy < h.r * h.r) return true;
+        }
+        return false;
+      }
+    : () => false;
+
+  const holeAreaFraction = holes.length
+    ? Math.min(1, holes.reduce((s, h) => s + Math.PI * h.r * h.r, 0) / (TAU * refRadius * height))
+    : 0;
+
   // Genormaliseerd naar [-1, 1]
   const organicField = (angle, t) => {
     if (!harmonics.length) return 0;
-    const rot = t * twistRad;
+    const rot = rotAt(t);
     let sum = 0;
     for (let i = 0; i < harmonics.length; i++) {
       const h = harmonics[i];
@@ -214,10 +350,58 @@ export function createVaseShape(params) {
     return (facetInner / Math.cos(a)) / facetMean;
   };
 
+  // Bobbelraster, waarde in [0, 1]
+  const bumpField = (a, t) => {
+    if (bumpCols < 1) return 0;
+    const row = t * bumpRows;
+    const ri = Math.floor(row);
+    if (ri >= bumpRows) return 0;
+    const off = p.bumpStagger !== false && ri % 2 ? Math.PI / bumpCols : 0;
+    return blob(Math.cos(bumpCols * (a - off)), Math.sin(Math.PI * (row - ri)), 1.6);
+  };
+
+  // Fijne textuur, waarde in [-1, 1]. Alle hoekfrequenties zijn heel getal,
+  // anders ontstaat er een naad bij hoek 0.
+  const textureField = (a, t) => {
+    const n = textureCols;
+    const m = textureRows;
+    switch (textureType) {
+      case 'lijnen':
+        return Math.sin(n * a);
+      case 'ruit':
+        return Math.sin(n * a + m * t * TAU) * Math.sin(n * a - m * t * TAU);
+      case 'noppen': {
+        const row = t * m;
+        const ri = Math.floor(row);
+        const off = ri % 2 ? Math.PI / n : 0;
+        return blob(Math.cos(n * (a - off)), Math.sin(Math.PI * (row - ri)), 1.5) * 2 - 1;
+      }
+      case 'schub': {
+        const row = t * m;
+        const ri = Math.floor(row);
+        const off = ri % 2 ? Math.PI / n : 0;
+        const u = Math.max(0, Math.cos(n * (a - off)));
+        return Math.pow(u, 0.7) * (1 - (row - ri)) * 2 - 1;
+      }
+      case 'geweven': {
+        const s = Math.sin(n * a) * Math.cos(m * t * TAU);
+        return Math.tanh(2.5 * s) / Math.tanh(2.5);
+      }
+      case 'grof': {
+        const n2 = Math.max(1, Math.round(n * 2.3));
+        const s = Math.sin(n * a) * Math.sin(m * t * TAU + 1.1)
+          + 0.6 * Math.sin(n2 * a + 0.7) * Math.sin(1.7 * m * t * TAU + 2.3);
+        return s / 1.6;
+      }
+      default:
+        return 0;
+    }
+  };
+
   // scale schaalt alleen de decoratie, nooit het basisprofiel
   const radiusRaw = (angle, t, scale) => {
     const base = baseRadiusAt(t);
-    const a = angle - t * twistRad; // twist draait het hele patroon mee omhoog
+    const a = angle - rotAt(t); // twist draait het hele patroon mee omhoog
 
     let factor = 1;
     if (facetStrength > 0) factor *= 1 + (facetField(a) - 1) * facetStrength * scale;
@@ -225,9 +409,20 @@ export function createVaseShape(params) {
 
     let r = base * factor;
     if (waveAmp > 0) r += patternProfile(p.patternShape, a * waveCount) * waveAmp * base * scale;
+    if (bumpAmp !== 0) r += bumpField(a, t) * bumpAmp * base * scale;
+    if (textureAmp > 0) r += textureField(a, t) * textureAmp * base * scale;
     if (organicAmount > 0) r += organicField(angle, t) * organicAmount * base * scale;
 
     return Math.max(base * 0.2, r);
+  };
+
+  // De rand golft naar beneden weg; de twist blijft er bewust buiten zodat
+  // de hoogte altijd monotoon blijft oplopen (anders vouwt de mesh).
+  const heightAt = (angle, t, scale = 1) => {
+    const y = t * height;
+    if (rimAmp <= 0 || scale <= 0) return y;
+    const w = clamp((t - 0.55) / 0.45, 0, 1);
+    return y - smoothstep(w) * rimAmp * scale * (1 - Math.sin(angle * rimCount)) * 0.5;
   };
 
   const centerRaw = (t, scale) => {
@@ -243,7 +438,6 @@ export function createVaseShape(params) {
     const steps = 60;
     const angles = 24;
     const dt = 1 / steps;
-    const dy = dt * height;
     let max = 0;
     for (let i = 0; i < steps; i++) {
       const t0 = i * dt;
@@ -256,6 +450,7 @@ export function createVaseShape(params) {
         const r1 = radiusRaw(a, t1, scale);
         const dx = c1.x + Math.cos(a) * r1 - (c0.x + Math.cos(a) * r0);
         const dz = c1.z + Math.sin(a) * r1 - (c0.z + Math.sin(a) * r0);
+        const dy = Math.max(1e-4, heightAt(a, t1, scale) - heightAt(a, t0, scale));
         const deg = (Math.atan2(Math.hypot(dx, dz), dy) * 180) / Math.PI;
         if (deg > max) max = deg;
       }
@@ -265,7 +460,8 @@ export function createVaseShape(params) {
 
   const limit = p.maxOverhang;
   const baseOverhang = measureOverhang(0);
-  const hasDetail = organicAmount > 0 || waveAmp > 0 || swayAmount > 0 || ringAmount > 0 || facetStrength > 0;
+  const hasDetail = organicAmount > 0 || waveAmp > 0 || swayAmount > 0 || ringAmount > 0
+    || facetStrength > 0 || bumpAmp !== 0 || textureAmp > 0 || rimAmp > 0;
 
   let detailScale = 1;
   // Als het silhouet zelf al te steil is valt er niets te redden met schalen:
@@ -290,7 +486,7 @@ export function createVaseShape(params) {
     const c = centerAt(t);
     return {
       x: c.x + Math.cos(angle) * r,
-      y: t * height,
+      y: heightAt(angle, t, detailScale),
       z: c.z + Math.sin(angle) * r,
     };
   };
@@ -301,15 +497,24 @@ export function createVaseShape(params) {
       128,
       waveAmp > 0 ? waveCount * 24 : 0,
       facetStrength > 0 ? facetCount * 48 : 0,
-      organicAmount > 0 ? maxOrder * 40 : 0
+      organicAmount > 0 ? maxOrder * 40 : 0,
+      bumpAmp !== 0 ? bumpCols * 28 : 0,
+      textureAmp > 0 ? textureCols * 8 : 0,
+      holes.length ? 320 : 0
     ),
     128,
     512
   );
   const heightSegments = clamp(
-    Math.round(80 + flow * detail * 12 + swayTurns * 30 + ringCount * 8 + Math.abs(p.twistAngle) / 12),
+    Math.round(
+      80 + flow * detail * 12 + swayTurns * 30 + ringCount * 8 + Math.abs(p.twistAngle) / 12
+        + (bumpAmp !== 0 ? bumpRows * 12 : 0)
+        + (textureAmp > 0 ? textureRows * 6 : 0)
+        + (holes.length ? 180 : 0)
+        + (rimAmp > 0 ? 40 : 0)
+    ),
     80,
-    240
+    280
   );
 
   return {
@@ -318,7 +523,12 @@ export function createVaseShape(params) {
     baseRadiusAt,
     radiusAt,
     centerAt,
+    heightAt,
     pointAt,
+    isHole,
+    hasHoles: holes.length > 0,
+    holeCount: holes.length,
+    holeAreaFraction,
     radialSegments,
     heightSegments,
     // printbaarheids-info voor de UI
@@ -341,20 +551,61 @@ export const SILHOUETTES = [
   { id: 'taps', label: '▽ Taps', bottom: 1.0, top: 0.6, useLow: false, useHigh: false },
 ];
 
-/** Decoratie-stijlen: zetten alleen de patroon-/organic-parameters. */
+/** Alle decoratie uit; elke preset zet hierop alleen aan wat hij nodig heeft. */
+const NO_DECOR = {
+  patternShape: 'golf',
+  waveCount: 0,
+  waveAmplitude: 0,
+  twistAngle: 0,
+  twistMode: 'lineair',
+  twistWaves: 1,
+  facetCount: 0,
+  facetStrength: 60,
+  ringCount: 0,
+  ringAmount: 4,
+  bumpCols: 0,
+  bumpRows: 8,
+  bumpDepth: 6,
+  textureType: 'geen',
+  textureScale: 24,
+  textureDepth: 3,
+  rimWaveCount: 0,
+  rimWaveDepth: 6,
+  organicAmount: 0,
+  swayAmount: 0,
+};
+
+const decor = (values) => ({ ...NO_DECOR, ...values });
+
+/** Decoratie-stijlen: zetten alleen de patroon-/textuur-/organic-parameters. */
 export const DECOR_PRESETS = [
-  { id: 'glad', label: '○ Glad', values: { waveAmplitude: 0, waveCount: 0, facetCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'ribbels', label: '≣ Ribbels', values: { patternShape: 'ribbel', waveCount: 20, waveAmplitude: 6, facetCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'cannelure', label: '⌇ Cannelure', values: { patternShape: 'groef', waveCount: 14, waveAmplitude: 7, facetCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'twist', label: '🌀 Twist', values: { patternShape: 'ribbel', waveCount: 12, waveAmplitude: 8, twistAngle: 180, facetCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0 } },
-  { id: 'facet', label: '⬡ Facet', values: { facetCount: 8, facetStrength: 80, waveAmplitude: 0, waveCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'kristal', label: '💎 Kristal', values: { facetCount: 6, facetStrength: 100, twistAngle: 90, waveAmplitude: 0, waveCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0 } },
-  { id: 'ster', label: '✦ Ster', values: { patternShape: 'ster', waveCount: 8, waveAmplitude: 12, facetCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'ringen', label: '☰ Ringen', values: { ringCount: 14, ringAmount: 5, waveAmplitude: 0, waveCount: 0, facetCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'paneel', label: '▤ Paneel', values: { patternShape: 'paneel', waveCount: 6, waveAmplitude: 9, facetCount: 0, ringCount: 0, organicAmount: 0, swayAmount: 0, twistAngle: 0 } },
-  { id: 'zacht', label: '◍ Zacht', values: { organicAmount: 8, organicDetail: 3, organicFlow: 35, swayAmount: 5, swayTurns: 0.25, waveAmplitude: 0, facetCount: 0, ringCount: 0 } },
-  { id: 'organisch', label: '🌿 Organisch', values: { organicAmount: 16, organicDetail: 5, organicFlow: 80, swayAmount: 10, swayTurns: 0.5, waveAmplitude: 0, facetCount: 0, ringCount: 0 } },
-  { id: 'wild', label: '🔥 Wild', values: { organicAmount: 28, organicDetail: 8, organicFlow: 150, swayAmount: 18, swayTurns: 1, waveAmplitude: 0, facetCount: 0, ringCount: 0 } },
+  { id: 'glad', label: '○ Glad', values: decor({}) },
+  { id: 'ribbels', label: '≣ Ribbels', values: decor({ patternShape: 'ribbel', waveCount: 20, waveAmplitude: 6 }) },
+  { id: 'cannelure', label: '⌇ Cannelure', values: decor({ patternShape: 'groef', waveCount: 14, waveAmplitude: 7 }) },
+  { id: 'twist', label: '🌀 Twist', values: decor({ patternShape: 'ribbel', waveCount: 12, waveAmplitude: 8, twistAngle: 180 }) },
+  { id: 'vlecht', label: '🪢 Vlecht', values: decor({ patternShape: 'kabel', waveCount: 10, waveAmplitude: 9, twistAngle: 220, twistMode: 'heen', twistWaves: 2 }) },
+  { id: 'facet', label: '⬡ Facet', values: decor({ facetCount: 8, facetStrength: 80 }) },
+  { id: 'kristal', label: '💎 Kristal', values: decor({ facetCount: 6, facetStrength: 100, twistAngle: 90 }) },
+  { id: 'ster', label: '✦ Ster', values: decor({ patternShape: 'ster', waveCount: 8, waveAmplitude: 12 }) },
+  { id: 'zaagtand', label: '⩘ Zaagtand', values: decor({ patternShape: 'zaag', waveCount: 18, waveAmplitude: 6, twistAngle: 120 }) },
+  { id: 'ringen', label: '☰ Ringen', values: decor({ ringCount: 14, ringAmount: 5 }) },
+  { id: 'paneel', label: '▤ Paneel', values: decor({ patternShape: 'paneel', waveCount: 6, waveAmplitude: 9 }) },
+  { id: 'bobbels', label: '⬤ Bobbels', values: decor({ bumpCols: 10, bumpRows: 10, bumpDepth: 8 }) },
+  { id: 'deuken', label: '◌ Deuken', values: decor({ bumpCols: 8, bumpRows: 8, bumpDepth: -7 }) },
+  { id: 'schubben', label: '🐟 Schubben', values: decor({ textureType: 'schub', textureScale: 28, textureDepth: 4 }) },
+  { id: 'geweven', label: '▦ Geweven', values: decor({ textureType: 'geweven', textureScale: 26, textureDepth: 4 }) },
+  { id: 'ruit', label: '◆ Ruit', values: decor({ textureType: 'ruit', textureScale: 30, textureDepth: 4 }) },
+  { id: 'kartelrand', label: '⌣ Kartelrand', values: decor({ patternShape: 'groef', waveCount: 12, waveAmplitude: 5, rimWaveCount: 12, rimWaveDepth: 8 }) },
+  { id: 'zacht', label: '◍ Zacht', values: decor({ organicAmount: 8, organicDetail: 3, organicFlow: 35, swayAmount: 5, swayTurns: 0.25 }) },
+  { id: 'organisch', label: '🌿 Organisch', values: decor({ organicAmount: 16, organicDetail: 5, organicFlow: 80, swayAmount: 10, swayTurns: 0.5 }) },
+  { id: 'wild', label: '🔥 Wild', values: decor({ organicAmount: 28, organicDetail: 8, organicFlow: 150, swayAmount: 18, swayTurns: 1 }) },
+];
+
+/** Gatenpatronen. */
+export const HOLE_MODES = [
+  { id: 'geen', label: '— Geen' },
+  { id: 'raster', label: '⊞ Symmetrisch raster' },
+  { id: 'willekeurig', label: '⁂ Willekeurig' },
 ];
 
 export const randomSeed = () => Math.floor(Math.random() * 100000) + 1;
@@ -409,24 +660,27 @@ export function randomVaseParams(rnd = Math.random) {
 
   const out = {
     ...base,
-    thickness: pick([0.8, 0.8, 1.0, 1.2]),
+    thickness: pick([0.8, 1.2, 1.2, 1.6]),
     maxOverhang: 40,
     autoLimit: true,
     seed: randomSeed(),
     // alles uit; de gekozen stijl zet hieronder aan wat nodig is
-    patternShape: 'golf',
-    waveCount: 0,
-    waveAmplitude: 0,
-    twistAngle: 0,
-    facetCount: 0,
+    ...NO_DECOR,
     facetStrength: 0,
-    ringCount: 0,
     ringAmount: 0,
-    organicAmount: 0,
+    bumpDepth: 0,
+    textureDepth: 0,
     organicDetail: 4,
     organicFlow: 60,
-    swayAmount: 0,
     swayTurns: 0.5,
+    holeMode: 'geen',
+    holeCols: 8,
+    holeRows: 3,
+    holeCount: 14,
+    holeSize: 45,
+    holeStagger: true,
+    holeStart: 25,
+    holeEnd: 80,
   };
 
   // Silhouet bijsturen tot het niet te steil overhangt
@@ -441,28 +695,54 @@ export function randomVaseParams(rnd = Math.random) {
   // Amplitude in % van de straal, begrensd op wat veilig te printen is
   const safePct = (n) => Math.floor(safeAmplitudeFraction(n, refRadius, out.thickness) * 100);
 
-  const style = pick(['patroon', 'patroon', 'patroon', 'facet', 'facet', 'ster', 'ringen', 'organisch', 'organisch', 'combi']);
+  const style = pick([
+    'patroon', 'patroon', 'patroon', 'facet', 'facet', 'ster', 'ringen',
+    'bobbels', 'bobbels', 'textuur', 'organisch', 'organisch', 'combi',
+  ]);
+
+  // Twist: soms doorlopend, soms heen-en-weer zodat de vorm zichzelf sluit
+  const addTwist = (max) => {
+    out.twistAngle = snap(range(-max, max), 30);
+    if (chance(0.35)) {
+      out.twistMode = 'heen';
+      out.twistWaves = pick([1, 1, 2, 3]);
+      out.twistAngle = snap(range(120, max), 30) * pick([1, -1]);
+    }
+  };
 
   if (style === 'patroon' || style === 'combi') {
-    out.patternShape = pick(['golf', 'ribbel', 'ribbel', 'groef', 'paneel']);
+    out.patternShape = pick(['golf', 'ribbel', 'ribbel', 'groef', 'paneel', 'zaag', 'punt', 'kabel']);
     out.waveCount = out.patternShape === 'paneel' ? Math.round(range(4, 9)) : Math.round(range(8, 34));
     out.waveAmplitude = Math.max(2, Math.round(range(0.45, 0.95) * safePct(out.waveCount)));
-    if (chance(0.55)) out.twistAngle = snap(range(-300, 300), 30);
+    if (chance(0.55)) addTwist(300);
   }
   if (style === 'ster') {
     out.patternShape = 'ster';
     out.waveCount = Math.round(range(5, 12));
     out.waveAmplitude = Math.max(4, Math.round(range(0.5, 0.9) * safePct(out.waveCount)));
-    if (chance(0.4)) out.twistAngle = snap(range(-180, 180), 30);
+    if (chance(0.4)) addTwist(180);
   }
   if (style === 'facet') {
     out.facetCount = Math.round(range(5, 12));
     out.facetStrength = snap(range(50, 100), 5);
-    if (chance(0.5)) out.twistAngle = snap(range(-240, 240), 30);
+    if (chance(0.5)) addTwist(240);
   }
   if (style === 'ringen') {
     out.ringCount = Math.round(range(6, 26));
     out.ringAmount = Math.round(range(3, 7));
+  }
+  if (style === 'bobbels') {
+    out.bumpCols = Math.round(range(6, 16));
+    out.bumpRows = Math.round(range(5, 16));
+    out.bumpStagger = chance(0.7);
+    const maxDepth = Math.max(4, safePct(Math.max(out.bumpCols, out.bumpRows)));
+    out.bumpDepth = Math.round(range(0.5, 1) * maxDepth) * (chance(0.25) ? -1 : 1);
+    if (chance(0.3)) addTwist(180);
+  }
+  if (style === 'textuur') {
+    out.textureType = pick(['lijnen', 'ruit', 'noppen', 'schub', 'geweven', 'grof']);
+    out.textureScale = Math.round(range(14, 46));
+    out.textureDepth = Math.max(2, Math.round(range(0.6, 1) * safePct(out.textureScale)));
   }
   if (style === 'organisch' || style === 'combi') {
     out.organicDetail = Math.round(range(3, 8));
@@ -472,6 +752,27 @@ export function randomVaseParams(rnd = Math.random) {
     out.organicFlow = snap(range(20, 150), 5);
     out.swayAmount = chance(0.6) ? Math.round(range(4, 20)) : 0;
     out.swayTurns = pick([0, 0.25, 0.5, 0.75, 1]);
+  }
+
+  // Extra's die over elke stijl heen kunnen
+  if (style !== 'textuur' && chance(0.25)) {
+    out.textureType = pick(['lijnen', 'ruit', 'noppen', 'geweven', 'grof']);
+    out.textureScale = Math.round(range(18, 46));
+    out.textureDepth = Math.max(1, Math.round(range(0.4, 0.8) * safePct(out.textureScale)));
+  }
+  if (chance(0.15)) {
+    out.rimWaveCount = pick([6, 8, 10, 12, 16]);
+    out.rimWaveDepth = Math.round(range(4, 12));
+  }
+  if (chance(0.18)) {
+    out.holeMode = pick(['raster', 'raster', 'willekeurig']);
+    out.holeStart = Math.round(range(15, 35));
+    out.holeEnd = Math.round(range(65, 88));
+    out.holeSize = Math.round(range(30, 65));
+    out.holeCols = Math.round(range(5, 14));
+    out.holeRows = Math.round(range(2, 6));
+    out.holeCount = Math.round(range(6, 26));
+    out.holeStagger = chance(0.7);
   }
 
   return out;

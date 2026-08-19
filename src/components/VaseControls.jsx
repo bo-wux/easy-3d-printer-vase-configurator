@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   createVaseShape,
   applySilhouette,
@@ -7,13 +7,25 @@ import {
   SILHOUETTES,
   DECOR_PRESETS,
   PATTERN_SHAPES,
+  TEXTURES,
+  HOLE_MODES,
   PRINTER_LIMITS,
 } from '../lib/vaseShape';
+import { FILAMENTS, FINISHES } from '../lib/filaments';
+
+const TABS = [
+  { id: 'vorm', label: '🏺 Vorm' },
+  { id: 'patroon', label: '≣ Patroon' },
+  { id: 'textuur', label: '⣿ Textuur' },
+  { id: 'gaten', label: '⊙ Gaten' },
+  { id: 'organisch', label: '🌿 Organisch' },
+  { id: 'print', label: '🖨️ Print' },
+];
 
 const Slider = ({ id, label, min, max, step, unit = '', value, hint, onChange, full = false }) => (
-  <div className={`control-group${full ? ' full' : ''}`}>
+  <div className={`control${full ? ' full' : ''}`}>
     <label htmlFor={id}>
-      {label}
+      <span className="control-label">{label}</span>
       <span className="control-value">{value}{unit}</span>
     </label>
     <input
@@ -30,19 +42,34 @@ const Slider = ({ id, label, min, max, step, unit = '', value, hint, onChange, f
   </div>
 );
 
-const Toggle = ({ label, checked, onChange }) => (
-  <div className="control-group">
-    <label className="toggle">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span>{label}</span>
-    </label>
+const Toggle = ({ label, checked, onChange, full = false }) => (
+  <label className={`toggle${full ? ' full' : ''}`}>
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <span className="toggle-track"><span className="toggle-knob" /></span>
+    <span>{label}</span>
+  </label>
+);
+
+const Chips = ({ options, value, onSelect, compare }) => (
+  <div className="full chip-row">
+    {options.map((o) => (
+      <button
+        key={o.id}
+        type="button"
+        className={`chip${(compare ? compare(o) : value === o.id) ? ' active' : ''}`}
+        onClick={() => onSelect(o)}
+      >
+        {o.label}
+      </button>
+    ))}
   </div>
 );
 
 const VaseControls = ({ params, onParamChange, onParamsChange }) => {
-  const shapeInfo = useMemo(() => createVaseShape(params), [params]);
+  const [tab, setTab] = useState('vorm');
+  const shape = useMemo(() => createVaseShape(params), [params]);
 
-  const overhang = Math.round(shapeInfo.maxOverhangDeg);
+  const overhang = Math.round(shape.maxOverhangDeg);
   const overhangLimit = params.maxOverhang;
   const overhangClass = overhang <= overhangLimit ? 'ok' : overhang <= overhangLimit + 10 ? 'warn' : 'bad';
 
@@ -52,177 +79,271 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
     params.useLow !== false ? params.diameterLow : 0,
     params.useHigh !== false ? params.diameterHigh : 0
   );
-  const bellyDiameter = maxDiameter;
   const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
   const layers = Math.ceil(params.height / params.layerHeight);
-
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
 
   return (
     <div className="controls">
-      <div className="controls-grid">
-        <div className="full action-row">
-          <button type="button" className="action-button primary" onClick={() => onParamsChange(randomVaseParams())}>
-            🎲 Verras me
+      <div className="action-row">
+        <button type="button" className="action-button primary" onClick={() => onParamsChange(randomVaseParams())}>
+          🎲 Verras me
+        </button>
+        <button type="button" className="action-button" onClick={() => onParamsChange({ seed: randomSeed() })}>
+          🌱 Andere seed
+        </button>
+      </div>
+
+      <div className="tab-row">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`tab${tab === t.id ? ' active' : ''}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
           </button>
-          <button type="button" className="action-button" onClick={() => onParamsChange({ seed: randomSeed() })}>
-            🌱 Andere seed
-          </button>
+        ))}
+      </div>
+
+      <div className="tab-body">
+        <div className="grid">
+          {tab === 'vorm' && (
+            <>
+              <h3 className="section-title full">Silhouet</h3>
+              <Chips
+                options={SILHOUETTES}
+                onSelect={(s) => onParamsChange(applySilhouette(s, maxDiameter, params.height))}
+                compare={() => false}
+              />
+              <Slider id="height" label="Hoogte" min={60} max={PRINTER_LIMITS.maxHeight} step={1} unit="mm"
+                value={params.height} onChange={onParamChange} />
+              <Slider id="thickness" label="Wanddikte" min={0.4} max={2.4} step={0.2} unit="mm"
+                value={params.thickness} onChange={onParamChange}
+                hint="0.8 = vase mode · 1.2 = 3 lijnen" />
+              <Slider id="diameterBottom" label="Ø Bodem" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
+                value={params.diameterBottom} onChange={onParamChange} />
+              <Slider id="diameterTop" label="Ø Opening" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
+                value={params.diameterTop} onChange={onParamChange} />
+
+              <h3 className="section-title full">Controlepunten</h3>
+              <Toggle label="Buik" checked={params.useLow !== false} onChange={(v) => onParamChange('useLow', v)} />
+              <Toggle label="Schouder" checked={params.useHigh !== false} onChange={(v) => onParamChange('useHigh', v)} />
+              {params.useLow !== false && (
+                <>
+                  <Slider id="diameterLow" label="Ø Buik" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
+                    value={params.diameterLow} onChange={onParamChange} />
+                  <Slider id="positionLow" label="Hoogte buik" min={5} max={95} step={1} unit="%"
+                    value={params.positionLow} onChange={onParamChange} />
+                </>
+              )}
+              {params.useHigh !== false && (
+                <>
+                  <Slider id="diameterHigh" label="Ø Schouder" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
+                    value={params.diameterHigh} onChange={onParamChange} />
+                  <Slider id="positionHigh" label="Hoogte schouder" min={5} max={95} step={1} unit="%"
+                    value={params.positionHigh} onChange={onParamChange} />
+                </>
+              )}
+            </>
+          )}
+
+          {tab === 'patroon' && (
+            <>
+              <h3 className="section-title full">Stijl</h3>
+              <Chips
+                options={DECOR_PRESETS}
+                onSelect={(preset) => onParamsChange(preset.values)}
+                compare={(preset) => matches(preset.values)}
+              />
+
+              <h3 className="section-title full">Profiel</h3>
+              <Chips
+                options={PATTERN_SHAPES}
+                value={params.patternShape}
+                onSelect={(s) => onParamChange('patternShape', s.id)}
+              />
+              <Slider id="waveCount" label="Herhalingen" min={0} max={48} step={1}
+                value={params.waveCount} onChange={onParamChange} />
+              <Slider id="waveAmplitude" label="Diepte" min={0} max={25} step={1} unit="%"
+                value={params.waveAmplitude} onChange={onParamChange} />
+
+              <h3 className="section-title full">Twist</h3>
+              <Chips
+                options={[{ id: 'lineair', label: '↗ Doorlopend' }, { id: 'heen', label: '↺ Heen en terug' }]}
+                value={params.twistMode || 'lineair'}
+                onSelect={(m) => onParamChange('twistMode', m.id)}
+              />
+              <Slider id="twistAngle" label="Draaihoek" min={-720} max={720} step={15} unit="°"
+                value={params.twistAngle} onChange={onParamChange} />
+              {params.twistMode === 'heen' && (
+                <Slider id="twistWaves" label="Keerpunten" min={1} max={4} step={1} unit="×"
+                  value={params.twistWaves ?? 1} onChange={onParamChange}
+                  hint="draait op en weer terug" />
+              )}
+
+              <h3 className="section-title full">Facetten & ringen</h3>
+              <Slider id="facetCount" label="Facetten" min={0} max={16} step={1}
+                value={params.facetCount} onChange={onParamChange} hint="0 = rond, 3+ = veelhoek" />
+              <Slider id="facetStrength" label="Facet sterkte" min={0} max={100} step={5} unit="%"
+                value={params.facetStrength} onChange={onParamChange} />
+              <Slider id="ringCount" label="Ringen" min={0} max={40} step={1}
+                value={params.ringCount} onChange={onParamChange} hint="horizontale banden" />
+              <Slider id="ringAmount" label="Ring diepte" min={0} max={12} step={1} unit="%"
+                value={params.ringAmount} onChange={onParamChange} />
+            </>
+          )}
+
+          {tab === 'textuur' && (
+            <>
+              <h3 className="section-title full">Oppervlaktetextuur</h3>
+              <Chips
+                options={TEXTURES}
+                value={params.textureType || 'geen'}
+                onSelect={(t) => onParamChange('textureType', t.id)}
+              />
+              {params.textureType !== 'geen' && (
+                <>
+                  <Slider id="textureScale" label="Fijnheid" min={8} max={64} step={1}
+                    value={params.textureScale} onChange={onParamChange} hint="herhalingen rondom" />
+                  <Slider id="textureDepth" label="Diepte" min={0} max={10} step={1} unit="%"
+                    value={params.textureDepth} onChange={onParamChange} hint="wordt veilig begrensd" />
+                </>
+              )}
+
+              <h3 className="section-title full">Bobbels</h3>
+              <Slider id="bumpCols" label="Rondom" min={0} max={24} step={1}
+                value={params.bumpCols} onChange={onParamChange} hint="0 = uit" />
+              <Slider id="bumpRows" label="Rijen" min={1} max={30} step={1}
+                value={params.bumpRows} onChange={onParamChange} />
+              <Slider id="bumpDepth" label="Hoogte" min={-15} max={15} step={1} unit="%"
+                value={params.bumpDepth} onChange={onParamChange} hint="negatief = deuken" />
+              <Toggle label="Versprongen rijen" checked={params.bumpStagger !== false}
+                onChange={(v) => onParamChange('bumpStagger', v)} />
+
+              <h3 className="section-title full">Golvende rand</h3>
+              <Slider id="rimWaveCount" label="Golven" min={0} max={24} step={1}
+                value={params.rimWaveCount} onChange={onParamChange} hint="0 of 1 = rechte rand" />
+              <Slider id="rimWaveDepth" label="Diepte" min={0} max={20} step={1} unit="%"
+                value={params.rimWaveDepth} onChange={onParamChange} hint="van de hoogte" />
+            </>
+          )}
+
+          {tab === 'gaten' && (
+            <>
+              <h3 className="section-title full">Gatenpatroon</h3>
+              <Chips
+                options={HOLE_MODES}
+                value={params.holeMode || 'geen'}
+                onSelect={(m) => onParamChange('holeMode', m.id)}
+              />
+              {params.holeMode === 'raster' && (
+                <>
+                  <Slider id="holeCols" label="Rondom" min={1} max={40} step={1}
+                    value={params.holeCols} onChange={onParamChange} />
+                  <Slider id="holeRows" label="Rijen" min={1} max={30} step={1}
+                    value={params.holeRows} onChange={onParamChange} />
+                  <Toggle label="Versprongen rijen" checked={params.holeStagger !== false}
+                    onChange={(v) => onParamChange('holeStagger', v)} />
+                </>
+              )}
+              {params.holeMode === 'willekeurig' && (
+                <Slider id="holeCount" label="Aantal" min={1} max={60} step={1}
+                  value={params.holeCount} onChange={onParamChange} hint="verdeling volgt de seed" />
+              )}
+              {params.holeMode !== 'geen' && (
+                <>
+                  <Slider id="holeSize" label="Grootte" min={5} max={95} step={1} unit="%"
+                    value={params.holeSize} onChange={onParamChange} />
+                  <Slider id="holeStart" label="Vanaf" min={6} max={88} step={1} unit="%"
+                    value={params.holeStart} onChange={onParamChange} />
+                  <Slider id="holeEnd" label="Tot" min={12} max={94} step={1} unit="%"
+                    value={params.holeEnd} onChange={onParamChange} />
+                  <div className="full info-box">
+                    <p>{shape.holeCount} gaten · {Math.round(shape.holeAreaFraction * 100)}% open oppervlak</p>
+                    <p className="muted">
+                      Gaten kunnen niet in vase mode: print met normale wanden (2 perimeters, 0% infill,
+                      met top/bottom uit). Bodem en rand blijven altijd dicht.
+                    </p>
+                    {shape.holeAreaFraction > 0.35 && (
+                      <p className="warn">⚠️ Veel open oppervlak — de vaas wordt fragiel.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {tab === 'organisch' && (
+            <>
+              <h3 className="section-title full">Vrije vervorming</h3>
+              <Slider id="organicAmount" label="Vervorming" min={0} max={40} step={1} unit="%"
+                value={params.organicAmount} onChange={onParamChange} hint="afwijking van rond" />
+              <Slider id="organicDetail" label="Detail" min={1} max={10} step={1}
+                value={params.organicDetail} onChange={onParamChange} hint="grote bulten ↔ kleine" />
+              <Slider id="organicFlow" label="Verloop" min={0} max={200} step={5} unit="%"
+                value={params.organicFlow} onChange={onParamChange} hint="0 = kolom, hoog = kronkelt" />
+              <Slider id="seed" label="Seed" min={1} max={99999} step={1}
+                value={params.seed} onChange={onParamChange} hint="ander getal = andere vorm" />
+              <Slider id="swayAmount" label="Scheefheid" min={0} max={40} step={1} unit="%"
+                value={params.swayAmount} onChange={onParamChange} hint="hartlijn wijkt af" />
+              <Slider id="swayTurns" label="Scheef draai" min={0} max={3} step={0.25} unit="×"
+                value={params.swayTurns} onChange={onParamChange} hint="0 = leunt recht, >0 = krult" />
+            </>
+          )}
+
+          {tab === 'print' && (
+            <>
+              <h3 className="section-title full">Filament</h3>
+              <div className="full swatch-row">
+                {FILAMENTS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    title={f.label}
+                    className={`swatch${params.filament === f.id ? ' active' : ''}`}
+                    style={{ background: f.color }}
+                    onClick={() => onParamChange('filament', f.id)}
+                  />
+                ))}
+              </div>
+              <Chips
+                options={FINISHES}
+                value={params.finish || 'basic'}
+                onSelect={(f) => onParamChange('finish', f.id)}
+              />
+
+              <h3 className="section-title full">Printbaarheid</h3>
+              <Toggle label="Auto printbaar houden" checked={params.autoLimit !== false}
+                onChange={(v) => onParamChange('autoLimit', v)} />
+              <Toggle label="Draaitafel" checked={!!params.autoRotate}
+                onChange={(v) => onParamChange('autoRotate', v)} />
+              <Slider id="maxOverhang" label="Max. overhang" min={15} max={60} step={1} unit="°"
+                value={params.maxOverhang} onChange={onParamChange} />
+              <Slider id="layerHeight" label="Laaghoogte" min={0.08} max={0.32} step={0.02} unit="mm"
+                value={params.layerHeight} onChange={onParamChange} />
+              <Toggle label="Toon printbed" checked={params.showGrid !== false}
+                onChange={(v) => onParamChange('showGrid', v)} full />
+            </>
+          )}
         </div>
+      </div>
 
-        <h3 className="section-title">🏺 Silhouet</h3>
-        <div className="full chip-row">
-          {SILHOUETTES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className="chip"
-              onClick={() => onParamsChange(applySilhouette(s, bellyDiameter, params.height))}
-            >
-              {s.label}
-            </button>
-          ))}
+      <div className="status-bar">
+        <div className="status-row">
+          <span>Ø {Math.round(maxDiameter)} × {params.height}mm</span>
+          <span>{layers} lagen · {params.thickness}mm wand</span>
+          <span className={overhangClass}>Steilste wand {overhang}°</span>
         </div>
-
-        <Slider id="height" label="Hoogte" min={60} max={PRINTER_LIMITS.maxHeight} step={5} unit="mm"
-          value={params.height} onChange={onParamChange} />
-        <Slider id="thickness" label="Wanddikte" min={0.4} max={2.4} step={0.1} unit="mm"
-          value={params.thickness} onChange={onParamChange} />
-
-        <Slider id="diameterBottom" label="Ø Bodem" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-          value={params.diameterBottom} onChange={onParamChange} />
-        <Slider id="diameterTop" label="Ø Opening" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-          value={params.diameterTop} onChange={onParamChange} />
-
-        <Toggle label="Buik gebruiken" checked={params.useLow !== false}
-          onChange={(v) => onParamChange('useLow', v)} />
-        <Toggle label="Schouder gebruiken" checked={params.useHigh !== false}
-          onChange={(v) => onParamChange('useHigh', v)} />
-
-        {params.useLow !== false && (
-          <>
-            <Slider id="diameterLow" label="Ø Buik" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-              value={params.diameterLow} onChange={onParamChange} />
-            <Slider id="positionLow" label="↕ Pos buik" min={5} max={95} step={1} unit="%"
-              value={params.positionLow} onChange={onParamChange} />
-          </>
+        {shape.limited && (
+          <p className="muted">Decoratie teruggeschaald naar {Math.round(shape.detailScale * 100)}% om printbaar te blijven.</p>
         )}
-        {params.useHigh !== false && (
-          <>
-            <Slider id="diameterHigh" label="Ø Schouder" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-              value={params.diameterHigh} onChange={onParamChange} />
-            <Slider id="positionHigh" label="↕ Pos schouder" min={5} max={95} step={1} unit="%"
-              value={params.positionHigh} onChange={onParamChange} />
-          </>
+        {shape.baseOverhangDeg > overhangLimit && (
+          <p className="bad">⚠️ Het silhouet zelf is te steil ({Math.round(shape.baseOverhangDeg)}°) — pas de diameters aan.</p>
         )}
-
-        <h3 className="section-title">🎨 Stijl</h3>
-        <div className="full chip-row">
-          {DECOR_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className={`chip${matches(preset.values) ? ' active' : ''}`}
-              onClick={() => onParamsChange(preset.values)}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-
-        <h3 className="section-title">≣ Patroon (symmetrisch)</h3>
-        <div className="full chip-row">
-          {PATTERN_SHAPES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`chip${params.patternShape === s.id ? ' active' : ''}`}
-              onClick={() => onParamChange('patternShape', s.id)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <Slider id="waveCount" label="Herhalingen" min={0} max={48} step={1}
-          value={params.waveCount} onChange={onParamChange} />
-        <Slider id="waveAmplitude" label="Diepte" min={0} max={25} step={1} unit="%"
-          value={params.waveAmplitude} onChange={onParamChange} />
-        <Slider id="twistAngle" label="Twist" min={-720} max={720} step={15} unit="°"
-          value={params.twistAngle} onChange={onParamChange} hint="draait het hele patroon over de hoogte" />
-        <Slider id="facetCount" label="Facetten" min={0} max={16} step={1}
-          value={params.facetCount} onChange={onParamChange} hint="0 = rond, 3+ = veelhoek" />
-        <Slider id="facetStrength" label="Facet sterkte" min={0} max={100} step={5} unit="%"
-          value={params.facetStrength} onChange={onParamChange} />
-        <Slider id="ringCount" label="Ringen" min={0} max={40} step={1}
-          value={params.ringCount} onChange={onParamChange} hint="horizontale banden" />
-        <Slider id="ringAmount" label="Ring diepte" min={0} max={12} step={1} unit="%"
-          value={params.ringAmount} onChange={onParamChange} />
-
-        <h3 className="section-title">🌿 Organisch (asymmetrisch)</h3>
-        <Slider id="organicAmount" label="Vervorming" min={0} max={40} step={1} unit="%"
-          value={params.organicAmount} onChange={onParamChange} hint="afwijking van rond" />
-        <Slider id="organicDetail" label="Detail" min={1} max={10} step={1}
-          value={params.organicDetail} onChange={onParamChange} hint="grote bulten ↔ kleine" />
-        <Slider id="organicFlow" label="Verloop" min={0} max={200} step={5} unit="%"
-          value={params.organicFlow} onChange={onParamChange} hint="0 = kolom, hoog = kronkelt" />
-        <Slider id="seed" label="Seed" min={1} max={999} step={1}
-          value={params.seed} onChange={onParamChange} hint="ander getal = andere vorm" />
-        <Slider id="swayAmount" label="Scheefheid" min={0} max={40} step={1} unit="%"
-          value={params.swayAmount} onChange={onParamChange} hint="hartlijn wijkt af" />
-        <Slider id="swayTurns" label="Scheef draai" min={0} max={3} step={0.25} unit="×"
-          value={params.swayTurns} onChange={onParamChange} hint="0 = leunt recht, >0 = krult" />
-
-        <h3 className="section-title">🖨️ Printbaarheid</h3>
-        <Toggle label="Automatisch printbaar houden" checked={params.autoLimit !== false}
-          onChange={(v) => onParamChange('autoLimit', v)} />
-        <Slider id="maxOverhang" label="Max. overhang" min={15} max={60} step={1} unit="°"
-          value={params.maxOverhang} onChange={onParamChange} />
-
-        <div className="full info-box">
-          <p>
-            Steilste wand: <strong className={overhangClass}>{overhang}°</strong> t.o.v. verticaal
-            {' · '}Ø max {maxDiameter}mm × {params.height}mm
-          </p>
-          {shapeInfo.limited && (
-            <p className="muted">
-              Decoratie automatisch teruggeschaald naar {Math.round(shapeInfo.detailScale * 100)}% om printbaar te blijven.
-            </p>
-          )}
-          {shapeInfo.baseOverhangDeg > overhangLimit && (
-            <p className="bad">⚠️ Het silhouet zelf is al te steil ({Math.round(shapeInfo.baseOverhangDeg)}°) — pas de diameters aan.</p>
-          )}
-          {!fitsBed && (
-            <p className="bad">⚠️ Past niet op de P1S ({PRINTER_LIMITS.maxDiameter}mm Ø × {PRINTER_LIMITS.maxHeight}mm).</p>
-          )}
-          <p className="muted">
-            ≈ {layers} lagen van {params.layerHeight}mm · wanddikte {params.thickness}mm
-            {params.thickness > 1.3 ? ' (vase mode print 1 wand: 0.8–1.2mm werkt het best)' : ''}
-          </p>
-        </div>
-
-        <h3 className="section-title">👁️ Weergave</h3>
-        <Toggle label="Toon grid/plaat" checked={params.showGrid !== false}
-          onChange={(v) => onParamChange('showGrid', v)} />
-        <Toggle label="Toon printlijnen" checked={params.showPrintLines || false}
-          onChange={(v) => onParamChange('showPrintLines', v)} />
-        <Slider id="materialBrightness" label="Materiaal tint" min={0.15} max={0.9} step={0.05}
-          value={params.materialBrightness} onChange={onParamChange} />
-
-        {params.showPrintLines && (
-          <>
-            <Toggle label="Vase mode (spiraal)" checked={params.spiralMode || false}
-              onChange={(v) => onParamChange('spiralMode', v)} />
-            <Slider id="layerHeight" label="Laaghoogte" min={0.08} max={0.32} step={0.02} unit="mm"
-              value={params.layerHeight} onChange={onParamChange} />
-            <Slider id="lineWidth" label="Lijnbreedte" min={0.4} max={0.8} step={0.02} unit="mm"
-              value={params.lineWidth} onChange={onParamChange} hint="0.4mm nozzle" />
-            <div className="full info-box">
-              <p className="muted">
-                Preview toont de laagstructuur proportioneel; bij {layers} lagen worden er minder ringen getekend
-                zodat het vloeiend blijft.
-              </p>
-            </div>
-          </>
+        {!fitsBed && (
+          <p className="bad">⚠️ Past niet op de P1S ({PRINTER_LIMITS.maxDiameter}mm Ø × {PRINTER_LIMITS.maxHeight}mm).</p>
         )}
       </div>
     </div>

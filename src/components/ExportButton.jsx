@@ -62,7 +62,7 @@ const ExportButton = ({ meshRef, params }) => {
       exportGeometry.dispose();
       
       console.log('✅ STL exported:', filename);
-      console.log(`📏 Afmetingen: ${params.height}mm (H) × ${params.diameter}mm (D)`);
+      console.log(`📏 Afmetingen: ${params.height}mm (H) × ${Math.round(maxDiameter)}mm (Ø)`);
       console.log('🔄 Oriëntatie: Z-up (opening boven, bodem op buildplate)');
     } catch (error) {
       console.error('❌ Export error:', error);
@@ -77,17 +77,9 @@ const ExportButton = ({ meshRef, params }) => {
         onClick={handleExport}
         disabled={!meshRef}
       >
-        📥 Download .STL for 3D Printing
+        ⬇ Download .STL
       </button>
-      <p style={{ 
-        fontSize: '0.65rem', 
-        color: '#666', 
-        marginTop: '0.4rem',
-        textAlign: 'center',
-        lineHeight: '1.3'
-      }}>
-        ✅ Correcte oriëntatie • Opening boven
-      </p>
+      <span className="export-hint">Z-up · opening boven · bodem op de plaat</span>
     </div>
   );
 };
