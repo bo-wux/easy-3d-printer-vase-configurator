@@ -2,7 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
-import { PRINTER_LIMITS } from '../lib/vaseShape';
+import { PRINTER_LIMITS, maxProfileDiameter } from '../lib/vaseShape';
 import { buildVaseMesh } from '../lib/vaseMesh';
 import { getFilament, getFinish } from '../lib/filaments';
 
@@ -52,9 +52,7 @@ const VaseMesh = ({ params, onMeshCreated }) => {
   const meshRef = useRef();
 
   const geometry = useMemo(() => createVaseGeometry(params), [
-    params.height, params.thickness,
-    params.diameterBottom, params.diameterLow, params.diameterHigh, params.diameterTop,
-    params.positionLow, params.positionHigh, params.useLow, params.useHigh,
+    params.height, params.thickness, params.profile, params.layerHeight,
     params.patternShape, params.waveCount, params.waveAmplitude,
     params.twistAngle, params.twistMode, params.twistWaves,
     params.facetCount, params.facetStrength, params.ringCount, params.ringAmount,
@@ -136,12 +134,7 @@ const captureThumbnail = (gl, scene, camera, maxWidth = 340) => {
 };
 
 const VaseViewer = ({ params, onMeshCreated, onCaptureReady }) => {
-  const maxDiameter = Math.max(
-    params.diameterBottom,
-    params.diameterTop,
-    params.useLow !== false ? params.diameterLow : 0,
-    params.useHigh !== false ? params.diameterHigh : 0
-  );
+  const maxDiameter = maxProfileDiameter(params);
   // afstand zo dat de vaas met marge in beeld staat bij fov 40
   const frame = Math.max(params.height * 1.9, maxDiameter * 3.6);
 

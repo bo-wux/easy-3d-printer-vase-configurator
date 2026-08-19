@@ -1,8 +1,12 @@
 import React from 'react';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
+import { buildVaseMesh } from '../lib/vaseMesh';
+import { maxProfileDiameter } from '../lib/vaseShape';
 
 const ExportButton = ({ meshRef, params }) => {
+  const vaseMode = !!params.vaseMode;
+
   const handleExport = () => {
     if (!meshRef) {
       alert('Geen vaas beschikbaar om te exporteren!');
@@ -10,13 +14,16 @@ const ExportButton = ({ meshRef, params }) => {
     }
 
     try {
-      // Create STL exporter
       const exporter = new STLExporter();
-      
-      // Clone de GEOMETRY (niet de mesh) voor export
-      const originalGeometry = meshRef.geometry;
-      const exportGeometry = originalGeometry.clone();
-      
+
+      // Bouw de mesh opnieuw uit de parameters: de export is zo onafhankelijk
+      // van wat er in de viewer staat (en kan massief voor vase mode).
+      const { positions, indices } = buildVaseMesh(params, { solid: vaseMode });
+      const exportGeometry = new THREE.BufferGeometry();
+      exportGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      exportGeometry.setIndex(indices);
+      exportGeometry.computeVertexNormals();
+
       // Roteer geometrie: Y-up (Three.js) → Z-up (STL standaard)
       // Draai +90 graden om X-as zodat Y → Z (opening boven!)
       const rotationMatrix = new THREE.Matrix4();
@@ -43,13 +50,8 @@ const ExportButton = ({ meshRef, params }) => {
       link.href = URL.createObjectURL(blob);
       
       // Filename with parameters
-      const maxDiameter = Math.max(
-        params.diameterBottom,
-        params.diameterTop,
-        params.useLow !== false ? params.diameterLow : 0,
-        params.useHigh !== false ? params.diameterHigh : 0
-      );
-      const filename = `vaas_H${params.height}_D${Math.round(maxDiameter)}_W${params.thickness}.stl`;
+      const maxDiameter = maxProfileDiameter(params);
+      const filename = `vaas_H${params.height}_D${Math.round(maxDiameter)}_W${params.thickness}${vaseMode ? '_vasemode' : ''}.stl`;
       link.download = filename;
       
       // Trigger download
@@ -79,7 +81,11 @@ const ExportButton = ({ meshRef, params }) => {
       >
         ⬇ Download .STL
       </button>
-      <span className="export-hint">Z-up · opening boven · bodem op de plaat</span>
+      <span className="export-hint">
+        {vaseMode
+          ? 'Massief model — zet spiral/vase mode aan in de slicer'
+          : 'Z-up · opening boven · bodem op de plaat'}
+      </span>
     </div>
   );
 };

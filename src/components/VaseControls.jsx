@@ -4,6 +4,11 @@ import {
   applySilhouette,
   randomVaseParams,
   randomSeed,
+  normalizeProfile,
+  profilePoints,
+  profileRadiusAt,
+  maxProfileDiameter,
+  MIN_NODE_GAP,
   SILHOUETTES,
   DECOR_PRESETS,
   PATTERN_SHAPES,
@@ -11,6 +16,7 @@ import {
   PRINTER_LIMITS,
 } from '../lib/vaseShape';
 import { FILAMENTS, FINISHES } from '../lib/filaments';
+import ProfileEditor from './ProfileEditor';
 
 const TABS = [
   { id: 'vorm', label: '🏺 Vorm' },
@@ -65,18 +71,54 @@ const Chips = ({ options, value, onSelect, compare }) => (
 
 const VaseControls = ({ params, onParamChange, onParamsChange }) => {
   const [tab, setTab] = useState('vorm');
+  const [node, setNode] = useState(1);
   const shape = useMemo(() => createVaseShape(params), [params]);
+  const profile = useMemo(() => profilePoints(params), [params]);
 
   const overhang = Math.round(shape.maxOverhangDeg);
   const overhangLimit = params.maxOverhang;
   const overhangClass = overhang <= overhangLimit ? 'ok' : overhang <= overhangLimit + 10 ? 'warn' : 'bad';
 
-  const maxDiameter = Math.max(
-    params.diameterBottom,
-    params.diameterTop,
-    params.useLow !== false ? params.diameterLow : 0,
-    params.useHigh !== false ? params.diameterHigh : 0
-  );
+  const maxDiameter = maxProfileDiameter(params);
+  const active = Math.min(node, profile.length - 1);
+  const point = profile[active];
+  const isEnd = active === 0 || active === profile.length - 1;
+
+  const setProfile = (next, keep = active) => {
+    const clean = normalizeProfile(next);
+    setNode(Math.min(keep, clean.length - 1));
+    onParamChange('profile', clean);
+  };
+
+  const moveNode = (index, patch) => {
+    setProfile(profile.map((p, i) => (i === index ? { ...p, ...patch } : p)), index);
+  };
+
+  const addNodeAt = ({ t, d }) => {
+    // punt tussen twee bestaande punten inschuiven, met wat lucht ertussen
+    const before = profile.filter((p) => p.t < t).length - 1;
+    if (before < 0 || before >= profile.length - 1) return;
+    const lo = profile[before].t + MIN_NODE_GAP;
+    const hi = profile[before + 1].t - MIN_NODE_GAP;
+    if (hi < lo) return;
+    const at = Math.min(hi, Math.max(lo, t));
+    setProfile([...profile, { t: at, d: d ?? profileRadiusAt(profile, at) * 2 }], before + 1);
+  };
+
+  const addNode = () => {
+    let gap = 0;
+    let at = 1;
+    for (let i = 1; i < profile.length; i++) {
+      if (profile[i].t - profile[i - 1].t > gap) { gap = profile[i].t - profile[i - 1].t; at = i; }
+    }
+    const t = (profile[at].t + profile[at - 1].t) / 2;
+    addNodeAt({ t, d: profileRadiusAt(profile, t) * 2 });
+  };
+
+  const removeNode = () => {
+    if (isEnd || profile.length <= 2) return;
+    setProfile(profile.filter((_, i) => i !== active), Math.max(1, active - 1));
+  };
   const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
   const layers = Math.ceil(params.height / params.layerHeight);
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
@@ -123,30 +165,49 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
               <Slider id="thickness" label="Wanddikte" min={0.4} max={2.4} step={0.2} unit="mm"
                 value={params.thickness} onChange={onParamChange}
                 hint="0.8 = vase mode · 1.2 = 3 lijnen" />
-              <Slider id="diameterBottom" label="Ø Bodem" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-                value={params.diameterBottom} onChange={onParamChange} />
-              <Slider id="diameterTop" label="Ø Opening" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-                value={params.diameterTop} onChange={onParamChange} />
 
               <h3 className="section-title full">Controlepunten</h3>
-              <Toggle label="Buik" checked={params.useLow !== false} onChange={(v) => onParamChange('useLow', v)} />
-              <Toggle label="Schouder" checked={params.useHigh !== false} onChange={(v) => onParamChange('useHigh', v)} />
-              {params.useLow !== false && (
-                <>
-                  <Slider id="diameterLow" label="Ø Buik" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-                    value={params.diameterLow} onChange={onParamChange} />
-                  <Slider id="positionLow" label="Hoogte buik" min={5} max={95} step={1} unit="%"
-                    value={params.positionLow} onChange={onParamChange} />
-                </>
-              )}
-              {params.useHigh !== false && (
-                <>
-                  <Slider id="diameterHigh" label="Ø Schouder" min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
-                    value={params.diameterHigh} onChange={onParamChange} />
-                  <Slider id="positionHigh" label="Hoogte schouder" min={5} max={95} step={1} unit="%"
-                    value={params.positionHigh} onChange={onParamChange} />
-                </>
-              )}
+              <div className="full profile-panel">
+                <ProfileEditor
+                  profile={profile}
+                  height={params.height}
+                  selected={active}
+                  onSelect={setNode}
+                  onMove={moveNode}
+                  onAdd={addNodeAt}
+                />
+                <p className="control-hint">Sleep een punt · dubbelklik in de vorm voor een punt erbij</p>
+              </div>
+              <div className="full chip-row">
+                {profile.map((p, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`chip${i === active ? ' active' : ''}`}
+                    onClick={() => setNode(i)}
+                  >
+                    {i === 0 ? 'Bodem' : i === profile.length - 1 ? 'Opening' : `Punt ${i}`}
+                  </button>
+                ))}
+              </div>
+              <Slider id="nodeDiameter" label={`Ø ${isEnd ? (active === 0 ? 'bodem' : 'opening') : `punt ${active}`}`}
+                min={20} max={PRINTER_LIMITS.maxDiameter} step={1} unit="mm"
+                value={point.d} onChange={(_, v) => moveNode(active, { d: Number(v) })} />
+              <Slider id="nodeHeight" label="Hoogte" min={0} max={100} step={1} unit="%"
+                value={Math.round(point.t * 100)}
+                onChange={(_, v) => {
+                  if (isEnd) return;
+                  const t = Math.min(profile[active + 1].t - MIN_NODE_GAP,
+                    Math.max(profile[active - 1].t + MIN_NODE_GAP, Number(v) / 100));
+                  moveNode(active, { t });
+                }}
+                hint={isEnd ? 'bodem en opening liggen vast' : undefined} />
+              <div className="full chip-row">
+                <button type="button" className="chip" onClick={addNode}>+ Punt</button>
+                <button type="button" className="chip" onClick={removeNode} disabled={isEnd || profile.length <= 2}>
+                  − Punt wissen
+                </button>
+              </div>
             </>
           )}
 
@@ -281,6 +342,14 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
                 value={params.layerHeight} onChange={onParamChange} />
               <Toggle label="Toon printbed" checked={params.showGrid !== false}
                 onChange={(v) => onParamChange('showGrid', v)} full />
+
+              <h3 className="section-title full">Export</h3>
+              <Toggle label="Vase mode (massief model)" checked={!!params.vaseMode}
+                onChange={(v) => onParamChange('vaseMode', v)} full />
+              <p className="control-hint full">
+                Aan: de STL is een massief lichaam zonder binnenwand. Zet spiral/vase mode aan in de
+                slicer — die print dan één doorlopende wand. Uit: normale holle vaas.
+              </p>
             </>
           )}
         </div>

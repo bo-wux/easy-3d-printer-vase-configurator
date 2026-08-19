@@ -1,8 +1,8 @@
 import { buildVaseMesh } from '../src/lib/vaseMesh.js';
 import { DEFAULT_SHAPE, randomVaseParams } from '../src/lib/vaseShape.js';
 
-const check = (label, params) => {
-  const { positions, indices } = buildVaseMesh(params);
+const check = (label, params, opts = {}) => {
+  const { positions, indices } = buildVaseMesh(params, opts);
   const key = (i) => `${Math.round(positions[i * 3] * 1000)},${Math.round(positions[i * 3 + 1] * 1000)},${Math.round(positions[i * 3 + 2] * 1000)}`;
   const dir = new Map();
   let volume = 0;
@@ -53,3 +53,8 @@ check('vase 0.8', { ...DEFAULT_SHAPE, thickness: 0.8, waveCount: 24, waveAmplitu
 check('twist+sway', { ...DEFAULT_SHAPE, twistAngle: 360, swayAmount: 15, organicAmount: 20 });
 check('rimwave', { ...DEFAULT_SHAPE, rimWaveCount: 8, rimWaveDepth: 12 });
 for (let i = 0; i < 5; i++) check('random ' + i, randomVaseParams());
+
+check('solid', { ...DEFAULT_SHAPE }, { solid: true });
+check('solid bobbel', { ...DEFAULT_SHAPE, bumpCols: 12, bumpRows: 8, bumpDepth: 12 }, { solid: true });
+check('solid rim', { ...DEFAULT_SHAPE, rimWaveCount: 8, rimWaveDepth: 12 }, { solid: true });
+for (let i = 0; i < 3; i++) check('solid rnd ' + i, randomVaseParams(), { solid: true });

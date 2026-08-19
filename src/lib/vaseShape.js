@@ -123,19 +123,73 @@ function safeAmplitudeFraction(n, radius, wall) {
   return Math.max(0.01, Math.min(spacing, curvature));
 }
 
+/** Minimale afstand tussen twee controlepunten, zodat er geen knik ontstaat. */
+export const MIN_NODE_GAP = 0.03;
+
+/**
+ * Controlepunten opschonen: op volgorde, binnen de printergrenzen, en het
+ * eerste en laatste punt liggen altijd exact op de bodem en de opening.
+ */
+export function normalizeProfile(points) {
+  const list = (points || [])
+    .filter((pt) => pt && Number.isFinite(pt.t) && Number.isFinite(pt.d))
+    .map((pt) => ({
+      t: clamp(pt.t, 0, 1),
+      d: clamp(Math.round(pt.d), PRINTER_LIMITS.minDiameter, PRINTER_LIMITS.maxDiameter),
+    }))
+    .sort((a, b) => a.t - b.t);
+  if (list.length < 2) return DEFAULT_SHAPE.profile.map((pt) => ({ ...pt }));
+  list[0].t = 0;
+  list[list.length - 1].t = 1;
+  // punten die tegen elkaar aan liggen geven een knik, dus die vallen af
+  const kept = [list[0]];
+  for (let i = 1; i < list.length - 1; i++) {
+    if (list[i].t - kept[kept.length - 1].t >= MIN_NODE_GAP && 1 - list[i].t >= MIN_NODE_GAP) {
+      kept.push(list[i]);
+    }
+  }
+  kept.push(list[list.length - 1]);
+  return kept;
+}
+
+/** Controlepunten van een ontwerp; ontwerpen van voor de profiel-editor worden omgezet. */
+export function profilePoints(p) {
+  if (Array.isArray(p.profile) && p.profile.length >= 2) return normalizeProfile(p.profile);
+  return normalizeProfile([
+    { t: 0, d: p.diameterBottom },
+    ...(p.useLow !== false ? [{ t: (p.positionLow ?? 33) / 100, d: p.diameterLow }] : []),
+    ...(p.useHigh !== false ? [{ t: (p.positionHigh ?? 67) / 100, d: p.diameterHigh }] : []),
+    { t: 1, d: p.diameterTop },
+  ]);
+}
+
+/** Straal op relatieve hoogte t, met vloeiende overgangen tussen de punten. */
+export function profileRadiusAt(points, t) {
+  for (let i = 1; i < points.length; i++) {
+    if (t <= points[i].t || i === points.length - 1) {
+      const a = points[i - 1];
+      const b = points[i];
+      const span = b.t - a.t;
+      const local = span > 1e-6 ? clamp((t - a.t) / span, 0, 1) : 1;
+      return (a.d + (b.d - a.d) * smoothstep(local)) / 2;
+    }
+  }
+  return points[0].d / 2;
+}
+
+export const maxProfileDiameter = (p) => profilePoints(p).reduce((m, pt) => Math.max(m, pt.d), 0);
+
 export const DEFAULT_SHAPE = {
-  // silhouet
+  // silhouet: controlepunten van bodem (t 0) naar opening (t 1)
   height: 180,
+  profile: [
+    { t: 0, d: 55 },
+    { t: 0.32, d: 88 },
+    { t: 0.7, d: 78 },
+    { t: 1, d: 62 },
+  ],
   // 1.2mm = 3 lijnen van 0.4mm: stevig en waterdicht, ook zonder vase mode
   thickness: 1.2,
-  diameterBottom: 55,
-  useLow: true,
-  diameterLow: 88,
-  positionLow: 32,
-  useHigh: true,
-  diameterHigh: 78,
-  positionHigh: 70,
-  diameterTop: 62,
   // symmetrisch patroon
   patternShape: 'ribbel',
   waveCount: 16,
@@ -176,26 +230,8 @@ export function createVaseShape(params) {
   const height = p.height;
   const wall = p.thickness;
 
-  // Silhouet als reeks controlepunten; buik en schouder zijn optioneel,
-  // uit = de vorm loopt in één vloeiende lijn van bodem naar opening.
-  const nodes = [{ t: 0, r: p.diameterBottom / 2 }];
-  if (p.useLow !== false) nodes.push({ t: clamp(p.positionLow / 100, 0.02, 0.98), r: p.diameterLow / 2 });
-  if (p.useHigh !== false) nodes.push({ t: clamp(p.positionHigh / 100, 0.02, 0.98), r: p.diameterHigh / 2 });
-  nodes.push({ t: 1, r: p.diameterTop / 2 });
-  nodes.sort((a, b) => a.t - b.t);
-
-  const baseRadiusAt = (t) => {
-    for (let i = 1; i < nodes.length; i++) {
-      if (t <= nodes[i].t || i === nodes.length - 1) {
-        const a = nodes[i - 1];
-        const b = nodes[i];
-        const span = b.t - a.t;
-        const local = span > 1e-6 ? clamp((t - a.t) / span, 0, 1) : 1;
-        return a.r + (b.r - a.r) * smoothstep(local);
-      }
-    }
-    return nodes[0].r;
-  };
+  const nodes = profilePoints(p);
+  const baseRadiusAt = (t) => profileRadiusAt(nodes, t);
 
   const refRadius = baseRadiusAt(0.5);
   const twistRad = (p.twistAngle / 180) * Math.PI;
@@ -334,10 +370,16 @@ export function createVaseShape(params) {
     }
   };
 
+  // De eerste lagen liggen vlak op de plaat: decoratie loopt pas daarboven in.
+  // flatSpan wordt hieronder ingevuld zodra de decoratiediepte bekend is.
+  let flatSpan = 0;
+  const groundFade = (t) => (flatSpan <= 0 ? 1 : smoothstep(clamp(t / flatSpan, 0, 1)));
+
   // scale schaalt alleen de decoratie, nooit het basisprofiel
-  const radiusRaw = (angle, t, scale) => {
+  const radiusRaw = (angle, t, scale, fade = true) => {
     const base = baseRadiusAt(t);
     const a = angle - rotAt(t); // twist draait het hele patroon mee omhoog
+    if (fade) scale *= groundFade(t);
 
     let factor = 1;
     if (facetStrength > 0) factor *= 1 + (facetField(a) - 1) * facetStrength * scale;
@@ -351,6 +393,22 @@ export function createVaseShape(params) {
 
     return Math.max(base * 0.2, r);
   };
+
+  // Aanloophoogte volgt de diepte van de decoratie: hoe dieper het reliëf, hoe
+  // langer de fade, zodat de overgang zelf nooit steiler wordt dan toegestaan.
+  {
+    let deepest = 0;
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20;
+      const base = baseRadiusAt(t);
+      for (let j = 0; j < 24; j++) {
+        deepest = Math.max(deepest, Math.abs(radiusRaw((j / 24) * TAU, t, 1, false) - base));
+      }
+    }
+    const layer = p.layerHeight > 0 ? p.layerHeight : 0.2;
+    const tanLimit = Math.tan((clamp(p.maxOverhang, 20, 70) * Math.PI) / 180);
+    flatSpan = clamp(Math.max(layer * 2, (1.5 * deepest) / tanLimit) / height, 0, 0.25);
+  }
 
   // De rand golft naar beneden weg; de twist blijft er bewust buiten zodat
   // de hoogte altijd monotoon blijft oplopen (anders vouwt de mesh).
@@ -535,21 +593,16 @@ export const DECOR_PRESETS = [
 
 export const randomSeed = () => Math.floor(Math.random() * 100000) + 1;
 
-/** Silhouet-verhoudingen omzetten naar echte diameters. */
+/** Silhouet-verhoudingen omzetten naar echte controlepunten. */
 export function applySilhouette(silhouette, bellyDiameter, height) {
   const d = (f) => clamp(Math.round(bellyDiameter * f), PRINTER_LIMITS.minDiameter, PRINTER_LIMITS.maxDiameter);
-  const useLow = silhouette.useLow !== false;
-  const useHigh = silhouette.useHigh !== false;
+  const points = [{ t: 0, d: Math.max(28, d(silhouette.bottom)) }];
+  if (silhouette.useLow !== false) points.push({ t: silhouette.lowPos / 100, d: d(silhouette.low) });
+  if (silhouette.useHigh !== false) points.push({ t: silhouette.highPos / 100, d: d(silhouette.high) });
+  points.push({ t: 1, d: d(silhouette.top) });
   return {
     height: clamp(Math.round(height), 60, PRINTER_LIMITS.maxHeight),
-    diameterBottom: Math.max(28, d(silhouette.bottom)),
-    useLow,
-    diameterLow: d(useLow ? silhouette.low : silhouette.bottom),
-    positionLow: useLow ? silhouette.lowPos : 33,
-    useHigh,
-    diameterHigh: d(useHigh ? silhouette.high : silhouette.top),
-    positionHigh: useHigh ? silhouette.highPos : 67,
-    diameterTop: d(silhouette.top),
+    profile: normalizeProfile(points),
   };
 }
 
@@ -570,18 +623,29 @@ export function randomVaseParams(rnd = Math.random) {
   const slenderness = range(1.5, 2.9); // hoogte t.o.v. buikdiameter
   const base = applySilhouette(silhouette, belly, belly * slenderness);
 
-  // Buik/schouder soms weglaten -> rustige vorm die in één lijn doorloopt.
-  // Als ze wel meedoen: posities licht variëren, maar met een minimale
-  // tussenafstand zodat er geen rare knik of dubbele knik ontstaat.
-  if (base.useLow && chance(0.15)) base.useLow = false;
-  if (base.useHigh && chance(0.2)) base.useHigh = false;
-  if (base.useLow) base.positionLow = clamp(Math.round(base.positionLow + range(-6, 6)), 15, 55);
-  if (base.useHigh) {
-    const floor = base.useLow ? base.positionLow + 20 : 30;
-    base.positionHigh = clamp(Math.round(base.positionHigh + range(-6, 6)), floor, 85);
+  // Tussenpunten variëren: soms eentje weg voor een rustige lijn die in één
+  // vloeiende beweging doorloopt, soms juist eentje erbij voor meer karakter.
+  let points = base.profile.map((pt) => ({ ...pt }));
+  const inner = () => points.slice(1, -1);
+  if (inner().length > 1 && chance(0.2)) {
+    const drop = 1 + Math.floor(rnd() * inner().length);
+    points = points.filter((_, i) => i !== drop);
   }
-  if (!base.useLow) base.diameterLow = base.diameterBottom;
-  if (!base.useHigh) base.diameterHigh = base.diameterTop;
+  points = points.map((pt, i) => (i === 0 || i === points.length - 1
+    ? pt
+    : { ...pt, t: clamp(pt.t + range(-0.06, 0.06), 0.1, 0.9) }));
+  if (chance(0.3)) {
+    // extra punt midden in het langste stuk: geeft een dubbele buik of taille
+    let gap = 0;
+    let at = 0;
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].t - points[i - 1].t > gap) { gap = points[i].t - points[i - 1].t; at = i; }
+    }
+    const t = (points[at].t + points[at - 1].t) / 2;
+    const d = ((points[at].d + points[at - 1].d) / 2) * range(0.82, 1.18);
+    points.splice(at, 0, { t, d });
+  }
+  base.profile = normalizeProfile(points);
 
   const out = {
     ...base,
@@ -601,11 +665,10 @@ export function randomVaseParams(rnd = Math.random) {
   };
 
   // Silhouet bijsturen tot het niet te steil overhangt
-  const keys = ['diameterBottom', 'diameterLow', 'diameterHigh', 'diameterTop'];
   for (let i = 0; i < 8; i++) {
     if (createVaseShape(out).baseOverhangDeg <= out.maxOverhang) break;
-    const mean = keys.reduce((s, k) => s + out[k], 0) / keys.length;
-    keys.forEach((k) => { out[k] = Math.round(mean + (out[k] - mean) * 0.85); });
+    const mean = out.profile.reduce((s, pt) => s + pt.d, 0) / out.profile.length;
+    out.profile = out.profile.map((pt) => ({ ...pt, d: Math.round(mean + (pt.d - mean) * 0.85) }));
   }
 
   const refRadius = createVaseShape(out).baseRadiusAt(0.5);

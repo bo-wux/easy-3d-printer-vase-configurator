@@ -1,4 +1,4 @@
-import { DECOR_PRESETS, PATTERN_SHAPES } from './vaseShape';
+import { DECOR_PRESETS, PATTERN_SHAPES, maxProfileDiameter } from './vaseShape';
 
 const KEY = 'evc.designs.v1';
 const DRAFT_KEY = 'evc.draft.v1';
@@ -9,12 +9,7 @@ const KEEP_THUMBS = 8;
 
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-export const maxDiameterOf = (p) => Math.max(
-  p.diameterBottom,
-  p.diameterTop,
-  p.useLow !== false ? p.diameterLow : 0,
-  p.useHigh !== false ? p.diameterHigh : 0
-);
+export const maxDiameterOf = (p) => maxProfileDiameter(p);
 
 export const loadDesigns = () => {
   try {

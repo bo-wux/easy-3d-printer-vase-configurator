@@ -3,7 +3,7 @@ import VaseControls from './VaseControls';
 import VaseViewer from './VaseViewer';
 import ExportButton from './ExportButton';
 import DesignLibrary from './DesignLibrary';
-import { DEFAULT_SHAPE } from '../lib/vaseShape';
+import { DEFAULT_SHAPE, profilePoints } from '../lib/vaseShape';
 import {
   loadDesigns, saveDesign, updateDesign, duplicateDesign, deleteDesign,
   suggestName, saveDraft, loadDraft, saveActiveId, loadActiveId,
@@ -17,10 +17,23 @@ const BASE_PARAMS = {
   showGrid: true,
   autoRotate: false,
   layerHeight: 0.2,
+  vaseMode: false,
+};
+
+const LEGACY_KEYS = [
+  'diameterBottom', 'diameterLow', 'diameterHigh', 'diameterTop',
+  'positionLow', 'positionHigh', 'useLow', 'useHigh',
+];
+
+// Ontwerpen van vóór de vrije controlepunten omzetten naar een profiel
+const withProfile = (saved) => {
+  const params = { ...BASE_PARAMS, ...saved, profile: profilePoints({ ...BASE_PARAMS, ...saved }) };
+  LEGACY_KEYS.forEach((k) => delete params[k]);
+  return params;
 };
 
 const VaseConfigurator = () => {
-  const [vaseParams, setVaseParams] = useState(() => ({ ...BASE_PARAMS, ...(loadDraft() || {}) }));
+  const [vaseParams, setVaseParams] = useState(() => withProfile(loadDraft() || {}));
   const [meshRef, setMeshRef] = useState(null);
   const [designs, setDesigns] = useState(() => loadDesigns());
   const [library, setLibrary] = useState({ open: false, focusSave: false });
@@ -111,7 +124,7 @@ const VaseConfigurator = () => {
   };
 
   const handleLoad = (design) => {
-    const params = { ...BASE_PARAMS, ...design.params };
+    const params = withProfile(design.params);
     setVaseParams(params);
     savedSnapshot.current = JSON.stringify(params);
     setActive({ id: design.id, name: design.name });
