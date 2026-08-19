@@ -1,95 +1,95 @@
-# 🔧 STL Export Fix - Belangrijke Updates
+# 🔧 STL Export Fix - Important Updates
 
-## ✅ Problemen Opgelost (v2.0)
+## ✅ Issues Resolved (v2.0)
 
 ### 1. **Non-Manifold Edges Fix**
-**Probleem:** Error 512 in Bambu Studio - geometrie was niet watertight
-**Oplossing:**
-- Volledige geometrie herschreven
-- Bottom rim correct verbonden (outer ↔ inner)
-- Top rim correct verbonden
-- Alle edges zijn nu manifold (watertight)
-- Geen gaten of open edges meer
+**Problem:** Error 512 in Bambu Studio — geometry was not watertight
+**Solution:**
+- Full geometry rebuilt
+- Bottom rim connected correctly (outer ↔ inner)
+- Top rim connected correctly
+- All edges are now manifold (watertight)
+- No gaps or open edges remain
 
-### 2. **Correcte Oriëntatie**
-**Probleem:** Vaas lag op z'n kant in slicer
-**Oplossing:**
-- Y-as wijst nu omhoog (standaard 3D printing oriëntatie)
-- Bodem ligt op Z=0 vlak
-- Opening aan bovenkant
-- Export heeft correcte rotatie
+### 2. **Correct Orientation**
+**Problem:** The vase was lying sideways in the slicer
+**Solution:**
+- Y-axis now points upward (standard 3D printing orientation)
+- Bottom sits on the Z=0 plane
+- Opening is at the top
+- Export now has the correct rotation
 
-### 3. **1:1 Schaal Fix**
-**Probleem:** Vaas was veel te klein in slicer
-**Oplossing:**
-- **Alle afmetingen zijn nu in echte millimeters!**
-- 150mm hoogte = 15cm in print
-- 100mm diameter = 10cm breed
-- Geen schaling meer - directe mm → STL conversie
+### 3. **1:1 Scale Fix**
+**Problem:** The vase was much too small in the slicer
+**Solution:**
+- **All dimensions are now in real millimeters**
+- 150mm height = 15cm in print
+- 100mm diameter = 10cm width
+- No scaling needed — direct mm → STL conversion
 
-## 📐 Verificatie in Bambu Studio
+## 📐 Verification in Bambu Studio
 
-Na import van de STL:
-- ✅ Geen error messages
-- ✅ Vaas staat rechtop (opening boven)
-- ✅ Bodem ligt op buildplate
-- ✅ Afmetingen kloppen exact:
-  - Hoogte slider 150mm = 150mm in slicer
+After importing the STL:
+- ✅ No error messages
+- ✅ Vase stands upright (opening at the top)
+- ✅ Bottom sits on the build plate
+- ✅ Dimensions match exactly:
+  - Height slider 150mm = 150mm in slicer
   - Diameter slider 100mm = 100mm in slicer
 
 ## 🎨 Features
 
 1. **Watertight Geometry**
-   - Top rim: verbindt outer/inner aan bovenkant
-   - Bottom rim: verbindt outer/inner aan onderkant
-   - Geen open edges
-   - Perfect voor 3D printing
+   - Top rim: connects outer/inner at the top
+   - Bottom rim: connects outer/inner at the bottom
+   - No open edges
+   - Ideal for 3D printing
 
-2. **Correcte Schaal**
-   - Print specificaties tonen echte cm/mm
-   - Volume berekening klopt
-   - Direct printbaar zonder schaling
+2. **Correct Scale**
+   - Print specifications display true cm/mm values
+   - Volume calculations are accurate
+   - Ready for direct printing without scaling
 
 3. **Wave Pattern**
-   - Werkt met de nieuwe watertight geometry
-   - Smooth ribbels zonder artifacts
-   - Wave count 0 = glad
+   - Works with the new watertight geometry
+   - Smooth ribs without artifacts
+   - Wave count 0 = smooth surface
 
-## 🖨️ Print Settings Aanbevolen
+## 🖨️ Recommended Print Settings
 
 ### Bambu Studio / Cura:
-```
+```text
 Layer Height: 0.2mm
-Wall Thickness: Gebruik "Vase Mode" of 2-3 walls
-Infill: 0% (vase mode) of 10-15%
-Support: Geen nodig
-Bottom Layers: 3-5 (als niet vase mode)
+Wall Thickness: Use "Vase Mode" or 2-3 walls
+Infill: 0% (vase mode) or 10-15%
+Support: Not needed
+Bottom Layers: 3-5 (if not using vase mode)
 ```
 
 ### Vase Mode (Spiralize):
-- Perfect voor deze vaas
-- 1 continue lijn
-- Snel en mooi resultaat
-- Set wanddikte op 1.2-2.0mm
+- Ideal for this vase
+- 1 continuous line
+- Fast and visually clean result
+- Set wall thickness to 1.2-2.0mm
 
 ## 🐛 Troubleshooting
 
 **Mesh errors in slicer?**
-- Herdownload STL met de nieuwe versie
-- Check dat alle sliders valid waarden hebben
-- Probeer eerst zonder wave effect (wave count = 0)
+- Redownload the STL with the newer version
+- Check that all sliders contain valid values
+- Try without the wave effect first (wave count = 0)
 
-**Vaas te groot/klein?**
-- Sliders zijn exact in mm
-- 150mm hoogte = 15cm print
-- Pas sliders aan voor gewenste grootte
-- Geen schaling nodig in slicer!
+**Vase too big/small?**
+- Sliders are exact in mm
+- 150mm height = 15cm print
+- Adjust the sliders for the desired size
+- No scaling is needed in the slicer!
 
-**Vaas print niet goed?**
-- Gebruik vase mode voor beste resultaat
-- Minimale wanddikte: 0.8mm (2x nozzle)
-- Check dat diameter/hoogte ratio niet te extreem is
+**Vase does not print well?**
+- Use vase mode for best results
+- Minimum wall thickness: 0.8mm (2x nozzle)
+- Check that the height/diameter ratio is not too extreme
 
 ---
 
-**Versie 2.0** - Alle 3D print issues opgelost! 🎉
+**Version 2.0** - All 3D print issues resolved! 🎉
