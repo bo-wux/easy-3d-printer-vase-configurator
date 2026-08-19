@@ -2,89 +2,14 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
-import { createVaseShape, PRINTER_LIMITS } from '../lib/vaseShape';
+import { PRINTER_LIMITS } from '../lib/vaseShape';
+import { buildVaseMesh } from '../lib/vaseMesh';
 import { getFilament, getFinish } from '../lib/filaments';
 
-const TAU = Math.PI * 2;
 const BED = PRINTER_LIMITS.bedSize;
 
-/**
- * Watertight vaas-mesh. Buiten- en binnenwand zijn hetzelfde raster met een
- * radiale offset, verbonden door de bovenrand en een massieve bodem.
- */
 const createVaseGeometry = (params) => {
-  const shape = createVaseShape(params);
-  const wall = shape.wall;
-  const rs = shape.radialSegments;
-  const hs = shape.heightSegments;
-  const ring = rs + 1;
-
-  const positions = [];
-  const uvs = [];
-  const indices = [];
-
-  const addGrid = (offset) => {
-    for (let i = 0; i <= hs; i++) {
-      const t = i / hs;
-      for (let j = 0; j <= rs; j++) {
-        const angle = (j / rs) * TAU;
-        const p = shape.pointAt(angle, t, offset);
-        positions.push(p.x, p.y, p.z);
-        uvs.push(j / rs, t);
-      }
-    }
-  };
-
-  addGrid(0);
-  const innerStart = ring * (hs + 1);
-  addGrid(-wall);
-
-  const O = (i, j) => i * ring + j;
-  const I = (i, j) => innerStart + i * ring + j;
-
-  for (let i = 0; i < hs; i++) {
-    for (let j = 0; j < rs; j++) {
-      // buitenwand
-      indices.push(O(i, j), O(i + 1, j), O(i, j + 1));
-      indices.push(O(i, j + 1), O(i + 1, j), O(i + 1, j + 1));
-      // binnenwand (omgekeerde winding)
-      indices.push(I(i, j), I(i, j + 1), I(i + 1, j));
-      indices.push(I(i, j + 1), I(i + 1, j + 1), I(i + 1, j));
-    }
-  }
-
-  // Bovenrand: buiten- en binnenwand verbinden
-  for (let j = 0; j < rs; j++) {
-    indices.push(O(hs, j), I(hs, j), O(hs, j + 1));
-    indices.push(O(hs, j + 1), I(hs, j), I(hs, j + 1));
-  }
-
-  // Massieve bodem: onderzijde + opstaande rand + bovenvlak op y = wall
-  const bottomTop = positions.length / 3;
-  for (let j = 0; j <= rs; j++) {
-    const p = shape.pointAt((j / rs) * TAU, 0, -wall);
-    positions.push(p.x, wall, p.z);
-    uvs.push(j / rs, 0);
-  }
-  const centerBottom = positions.length / 3;
-  positions.push(0, 0, 0);
-  uvs.push(0.5, 0);
-  const centerTop = positions.length / 3;
-  positions.push(0, wall, 0);
-  uvs.push(0.5, 0);
-
-  for (let j = 0; j < rs; j++) {
-    indices.push(O(0, j), O(0, j + 1), I(0, j));
-    indices.push(O(0, j + 1), I(0, j + 1), I(0, j));
-
-    indices.push(centerBottom, I(0, j + 1), I(0, j));
-
-    indices.push(I(0, j), I(0, j + 1), bottomTop + j);
-    indices.push(I(0, j + 1), bottomTop + j + 1, bottomTop + j);
-
-    indices.push(centerTop, bottomTop + j, bottomTop + j + 1);
-  }
-
+  const { positions, uvs, indices } = buildVaseMesh(params);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));

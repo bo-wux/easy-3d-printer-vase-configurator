@@ -225,11 +225,15 @@ export function createVaseShape(params) {
   const bumpCols = Math.round(p.bumpCols ?? 0);
   const bumpRows = clamp(Math.round(p.bumpRows ?? 1), 1, 40);
   const bumpDepth = p.bumpDepth ?? 0;
+  // Een bult mag nooit hoger worden dan zijn eigen rastercel: anders lopen de
+  // bollen in elkaar en snijdt de binnenwand zichzelf. Tweede grens: de holle
+  // overgang tussen twee bulten moet ruimer blijven dan de wanddikte.
+  const bumpCell = bumpCols >= 1 ? Math.min((TAU * refRadius) / bumpCols, height / bumpRows) : 0;
+  const bumpMaxFraction = bumpCell > 0
+    ? Math.min(0.4 * bumpCell, (bumpCell * bumpCell) / (8 * wall)) / refRadius
+    : 0;
   const bumpAmp = bumpCols >= 1 && bumpDepth !== 0
-    ? Math.sign(bumpDepth) * Math.min(
-        Math.abs(bumpDepth) / 100,
-        safeAmplitudeFraction(Math.max(bumpCols, bumpRows), refRadius, wall)
-      )
+    ? Math.sign(bumpDepth) * Math.min(Math.abs(bumpDepth) / 100, bumpMaxFraction)
     : 0;
 
   // Fijne oppervlaktetextuur
@@ -457,6 +461,8 @@ export function createVaseShape(params) {
     pointAt,
     radialSegments,
     heightSegments,
+    // grootste bobbelhoogte die bij dit raster nog veilig is, in % van de straal
+    bumpMaxPercent: Math.round(bumpMaxFraction * 100),
     // printbaarheids-info voor de UI
     maxOverhangDeg: measureOverhang(detailScale),
     baseOverhangDeg: baseOverhang,

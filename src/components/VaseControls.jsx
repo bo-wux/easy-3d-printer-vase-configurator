@@ -80,6 +80,9 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
   const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
   const layers = Math.ceil(params.height / params.layerHeight);
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
+  // dieper dan dit loopt het bobbelraster in zichzelf, dus houdt de slider ook op
+  const bumpMax = Math.max(1, shape.bumpMaxPercent);
+  const bumpDepth = Math.min(bumpMax, Math.max(-bumpMax, params.bumpDepth));
 
   return (
     <div className="controls">
@@ -214,9 +217,9 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
               <Slider id="bumpCols" label="Rondom" min={0} max={24} step={1}
                 value={params.bumpCols} onChange={onParamChange} hint="0 = uit" />
               <Slider id="bumpRows" label="Rijen" min={1} max={30} step={1}
-                value={params.bumpRows} onChange={onParamChange} />
-              <Slider id="bumpDepth" label="Hoogte" min={-15} max={15} step={1} unit="%"
-                value={params.bumpDepth} onChange={onParamChange} hint="negatief = deuken" />
+                value={params.bumpRows} onChange={onParamChange} hint="meer rijen = kleinere bobbels" />
+              <Slider id="bumpDepth" label="Hoogte" min={-bumpMax} max={bumpMax} step={1} unit="%"
+                value={bumpDepth} onChange={onParamChange} hint="negatief = deuken" />
               <Toggle label="Versprongen rijen" checked={params.bumpStagger !== false}
                 onChange={(v) => onParamChange('bumpStagger', v)} />
 
@@ -290,7 +293,10 @@ const VaseControls = ({ params, onParamChange, onParamsChange }) => {
           <span className={overhangClass}>Steilste wand {overhang}°</span>
         </div>
         {shape.limited && (
-          <p className="muted">Decoratie teruggeschaald naar {Math.round(shape.detailScale * 100)}% om printbaar te blijven.</p>
+          <p className="muted">
+            Decoratie teruggeschaald naar {Math.round(shape.detailScale * 100)}% om printbaar te blijven —
+            dieper instellen helpt niet, verhoog eerst de max. overhang.
+          </p>
         )}
         {shape.baseOverhangDeg > overhangLimit && (
           <p className="bad">⚠️ Het silhouet zelf is te steil ({Math.round(shape.baseOverhangDeg)}°) — pas de diameters aan.</p>
