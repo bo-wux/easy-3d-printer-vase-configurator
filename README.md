@@ -7,26 +7,26 @@
   <img src="https://img.shields.io/badge/STL-Export-4CAF50" alt="STL export" />
 </p>
 
-A polished web app for designing custom 3D printable vase shapes directly in the browser. Adjust the silhouette, surface pattern, twist, organic flow, and printability limits, then export the final model as an STL file ready for your 3D printer.
+A premium browser-based tool for designing custom 3D-printable vase shapes. Fine-tune the silhouette, create decorative surface patterns, adjust printability settings, and export a ready-to-print STL in a few clicks.
 
 <div align="center">
   <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1100" />
 </div>
 
-## Why this project
+## Overview
 
-This project was created to make custom vase design faster, more visual, and more approachable. Instead of jumping between CAD tools and print preparation workflows, you can iterate on shape, density, pattern, and stability in one place and export the final file without leaving the browser.
+This project turns vase design into a fast visual workflow. Instead of modeling by hand in CAD software, you can iterate on proportions, twist, pattern, and print stability directly in the browser and export the final result for your 3D printer.
 
-## What you can do
+## Key features
 
-- Shape the vase with profile controls for height, opening, belly, shoulders, and wall thickness
-- Generate pattern styles like ribs, grooves, rings, facets, waves, and twist-based design
-- Apply organic deformation for more natural and artistic silhouettes
-- Tune printability constraints to reduce steep overhangs and improve stability
-- Preview the object in real time in a 3D viewer
-- Export the finished design as STL directly from the app
+- Real-time 3D visualization while you edit the model
+- Adjustable silhouette with height, base, top opening, shoulders, and belly controls
+- Decorative pattern options including ribs, grooves, rings, waves, facets, and twist styling
+- Organic form controls for more natural, sculptural vase profiles
+- Printability-aware settings to reduce steep overhangs and improve successful prints
+- Direct STL export with no backend required
 
-## Screenshots
+## Gallery
 
 <div align="center">
   <img src="screenshots/app-overview.png" alt="Main configurator overview" width="980" />
@@ -34,14 +34,14 @@ This project was created to make custom vase design faster, more visual, and mor
   <img src="screenshots/viewer-detail.png" alt="Detailed 3D vase viewer" width="980" />
 </div>
 
-## Features
+## Why it is useful
 
-- Real-time 3D preview of the vase while editing
-- Multiple silhouette presets and custom control points
-- Symmetrical pattern generation for ribs, waves, grooves, stars, and rings
-- Organic styling with asymmetry, flow, and seed-based variation
-- Material and finish settings for a more realistic look
-- Browser-based STL export for maker workflows and quick production iterations
+This project is designed for makers who want quick iteration without the friction of traditional CAD workflows. It is especially helpful for:
+
+- decorative home objects
+- custom gifts and one-off pieces
+- small maker-lab explorations
+- fast concepting of printable vase forms
 
 ## Tech stack
 
@@ -51,49 +51,44 @@ This project was created to make custom vase design faster, more visual, and mor
 - @react-three/fiber
 - @react-three/drei
 
-## Installation
+## Getting started
 
-1. Clone the repository:
+### 1) Clone the repository
 
 ```bash
 git clone https://github.com/bo-wux/easy-3d-printer-vase-configurator.git
 cd easy-3d-printer-vase-configurator
 ```
 
-2. Install dependencies:
+### 2) Install dependencies
 
 ```bash
 npm install
 ```
 
-3. Start the app in development mode:
+### 3) Run locally
 
 ```bash
 npm run dev
 ```
 
-4. Open the app in your browser:
+Then open:
 
 ```text
 http://localhost:3000
 ```
 
-## Production build
+### 4) Build for production
 
 ```bash
 npm run build
 ```
 
-The build output is placed in the `dist` directory.
+The optimized build output is generated in the `dist` folder.
 
-## How to use it
+## How it works
 
-- Use the left-side controls to define the vase profile and proportions
-- Switch between silhouette presets to quickly explore different shapes
-- Fine-tune pattern, twist, and organic controls for a more unique design
-- Use printability settings to keep the structure more stable and printable
-- Rotate and zoom the model in the 3D viewer to inspect it from every angle
-- Click the export button to download the generated STL file
+The configurator generates a parametric vase profile and then applies patterning, organic deformation, and printability rules before exporting the final geometry. This makes it easy to test different aesthetic directions while keeping the object suitable for practical 3D printing.
 
 ## Project structure
 
@@ -113,21 +108,10 @@ src/
 └── ...
 ```
 
-## Design notes
-
-The geometry is generated with a parametric model tailored for 3D-printable vase forms. This means the vessel is built from a consistent profile, then refined with patterning and organic deformation while staying compatible with typical FDM printing constraints.
-
-It is especially useful for:
-
-- decorative home objects
-- custom one-off gifts
-- small maker lab experiments
-- rapid exploration of printable bottle and vase forms
-
 ## License
 
 This project is open source and intended for maker and 3D-print workflows.
 
 ## Credits
 
-Built for fast, visual iteration in the creation of elegant and functional custom 3D-printable vases.
+Built for visual, fast, and flexible custom vase design.
