@@ -1,142 +1,107 @@
-# 🏺 3D Vase Configurator - MakerLab Edition
+# Easy 3D Printer Vase Configurator
 
-Een moderne, volledig functionele Single Page Application (SPA) voor het ontwerpen en exporteren van 3D-printbare vazen.
+Een moderne webapp voor het ontwerpen, aanpassen en exporteren van 3D-printbare vazen. De configurator draait volledig in de browser en genereert een printable STL-directie voor je 3D-printer.
 
-## ✨ Features
+<div align="center">
+  <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1000" />
+</div>
 
-- **Real-time 3D Rendering**: Direct visuele feedback met Three.js
-- **4 Aanpasbare Parameters**:
-  - 📏 Hoogte (50-300mm)
-  - ⭕ Diameter (50-200mm)
-  - 🧱 Wanddikte (0.4-4.0mm) - optimaal voor 3D printing
-  - 🌀 Twist Effect (0-360°) - MakerLab signature look
-- **STL Export**: Direct downloadbaar voor 3D printers
-- **Interactieve 3D View**: Rotate, zoom en pan met je muis
-- **Modern UI**: Clean, gradient design met responsive controls
+## Highlights
 
-## 🚀 Installatie & Start
+- Real-time 3D preview van de vaasvorm
+- Aanpasbare parameters zoals hoogte, diameter, wanddikte en twist
+- Print preview en visuele controle van de geometrie
+- STL export voor 3D-printen direct vanuit de browser
+- Responsive interface voor snel itereren op ontwerpkeuzes
 
-### Stap 1: Installeer Dependencies
+## Screenshots
 
-Open een terminal in deze folder en voer uit:
+<div align="center">
+  <img src="screenshots/app-overview.png" alt="Main configurator view" width="900" />
+  <br /><br />
+  <img src="screenshots/viewer-detail.png" alt="3D viewer detail" width="900" />
+</div>
 
-```powershell
+## Features
+
+- Hoek- en vorminstellingen voor unieke vaasprofielen
+- Regelbare wall thickness en print parameters
+- Realistische 3D rendering met React Three Fiber
+- Directe STL-download zonder server-side exporttool
+- Geschikt voor MakerLab- of Bambu Lab workflows
+
+## Tech Stack
+
+- React 18
+- Vite
+- Three.js
+- @react-three/fiber
+- @react-three/drei
+
+## Installatie
+
+1. Clone de repository:
+
+```bash
+git clone https://github.com/bo-wux/easy-3d-printer-vase-configurator.git
+cd easy-3d-printer-vase-configurator
+```
+
+2. Installeer dependencies:
+
+```bash
 npm install
 ```
 
-### Stap 2: Start Development Server
+3. Start de development server:
 
-```powershell
+```bash
 npm run dev
 ```
 
-De applicatie opent automatisch in je browser op `http://localhost:3000`
+4. Open de app in je browser op:
 
-### Stap 3: Begin met Ontwerpen!
+```text
+http://localhost:3000
+```
 
-- Gebruik de sliders in het linkerpaneel om je vaas vorm te geven
-- Rotate de 3D view met je muis
-- Zoom met je scroll wheel
-- Klik op "Download .STL for 3D Printing" om te exporteren
+## Build voor productie
 
-## 📦 Build voor Productie
-
-Om een productie-build te maken:
-
-```powershell
+```bash
 npm run build
 ```
 
-De geoptimaliseerde bestanden komen in de `dist` folder.
+De build wordt gegenereerd in de `dist` map.
 
-## 🛠️ Technische Details
+## Gebruik
 
-### Tech Stack
+- Pas de vorm aan met de sliders in het linkerpaneel
+- Bekijk de vaas direct in 3D
+- Zoom en draai in de viewer om verschillende hoeken te inspecteren
+- Klik op de exportknop om een STL-bestand te downloaden
 
-- **React 18** - UI Framework
-- **Vite** - Snelle development & build tool
-- **Three.js** - 3D Rendering engine
-- **@react-three/fiber** - React renderer voor Three.js
-- **@react-three/drei** - Helpers (OrbitControls, Environment)
+## Projectstructuur
 
-### Architectuur
-
-```
+```text
 src/
 ├── components/
-│   ├── VaseConfigurator.jsx    # Hoofd component (state management)
-│   ├── VaseControls.jsx        # UI controls (sliders)
-│   ├── VaseViewer.jsx          # 3D rendering & geometrie
-│   └── ExportButton.jsx        # STL export functionaliteit
-├── main.jsx                    # App entry point
-└── index.css                   # Global styles
+│   ├── ExportButton.jsx
+│   ├── PrintPreview.jsx
+│   ├── VaseConfigurator.jsx
+│   ├── VaseControls.jsx
+│   └── VaseViewer.jsx
+├── lib/
+│   └── vaseShape.js
+├── index.css
+├── main.jsx
+├── App.jsx
+└── ...
 ```
 
-### Geometrie Generatie
+## Licentie
 
-De vaas wordt gegenereerd met **LatheGeometry** principe:
-- Een 2D profiel wordt geroteerd rond de Y-as
-- Inner en outer surfaces voor realistische wanddikte
-- Twist effect wordt toegepast via vertex manipulation
-- Geometry wordt automatisch gecentreerd
+Dit project is open source en bedoeld voor MakerLab- en 3D-printprojecten.
 
-### STL Export
+## Credits
 
-- Gebruikt Three.js's officiële `STLExporter`
-- Binary STL format voor kleinere bestanden
-- Bestandsnaam bevat alle parameters voor tracering
-- Direct browser download zonder server
-
-## 🎨 Customization
-
-### Kleuren aanpassen
-
-In `VaseViewer.jsx`, regel 170:
-
-```jsx
-<meshStandardMaterial 
-  color="#8b9dc3"  // Wijzig deze hex color
-  metalness={0.3}
-  roughness={0.4}
-/>
-```
-
-### Parameter ranges aanpassen
-
-In `VaseControls.jsx`, pas de `controls` array aan (regels 6-35).
-
-### Vaas vorm aanpassen
-
-In `VaseViewer.jsx`, functie `createVaseGeometry`, regels 27-43:
-- Wijzig de `radiusFactor` berekening voor andere vormen
-- Experimenteer met sine/cosine functies voor organische vormen
-
-## 🐛 Troubleshooting
-
-### "Cannot find module" errors
-```powershell
-rm -rf node_modules
-npm install
-```
-
-### Port 3000 is al in gebruik
-Wijzig in `vite.config.js`:
-```js
-server: {
-  port: 3001,  // Gebruik een andere port
-  open: true
-}
-```
-
-### STL export werkt niet
-- Check de browser console voor errors
-- Zorg dat de vaas zichtbaar is in de 3D view
-- Probeer een andere browser (Chrome/Edge recommended)
-
-## 📝 Licentie
-
-Open source - gebruik voor je MakerLab projecten! 🚀
-
----
-
-**Gemaakt met ❤️ voor MakerLab - Where Makers Meet Magic**
+Gemaakt voor een snelle en visuele workflow voor het ontwerpen van unieke 3D-printbare vazen.
