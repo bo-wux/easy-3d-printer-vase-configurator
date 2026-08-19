@@ -16,6 +16,8 @@
  *   6. Sway          - de hartlijn zelf verplaatst zich -> scheve vaas
  */
 
+import { FILAMENTS } from './filaments.js';
+
 const TAU = Math.PI * 2;
 const smoothstep = (x) => x * x * (3 - 2 * x);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -998,6 +1000,8 @@ export function randomVaseParams(rnd = Math.random) {
   const out = {
     ...base,
     thickness: pick([0.8, 1.2, 1.2, 1.6]),
+    filament: pick(FILAMENTS).id,
+    finish: pick(['mat', 'basic', 'basic', 'silk']),
     maxOverhang: 40,
     autoLimit: true,
     seed: randomSeed(),
