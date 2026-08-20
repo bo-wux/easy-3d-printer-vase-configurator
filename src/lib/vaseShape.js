@@ -72,6 +72,10 @@ export const PATTERN_SHAPES = [
   { id: 'zaag', label: 'Zaag' },
   { id: 'punt', label: 'Punt' },
   { id: 'kabel', label: 'Kabel' },
+  { id: 'kerf', label: 'Kerf' },
+  { id: 'trap', label: 'Trap' },
+  { id: 'schelp', label: 'Schelp' },
+  { id: 'bol', label: 'Bol' },
 ];
 
 // Fijne oppervlaktetexturen (bovenop het patroon)
@@ -83,6 +87,8 @@ export const TEXTURES = [
   { id: 'schub', label: '🐟 Schubben' },
   { id: 'geweven', label: '▦ Geweven' },
   { id: 'grof', label: '▨ Ruw' },
+  { id: 'diagonaal', label: '⁄ Diagonaal' },
+  { id: 'hamerslag', label: '⬢ Hamerslag' },
 ];
 
 // Alle profielen leveren een waarde in [-1, 1]
@@ -103,6 +109,14 @@ function patternProfile(shape, phase) {
       return 2 * Math.pow(Math.abs(Math.sin(phase / 2)), 4) - 1;
     case 'kabel': // touw/kabel: dubbele lob per herhaling
       return clamp(0.78 * s + 0.28 * Math.sin(2 * phase + 1.2), -1, 1);
+    case 'kerf': // smalle diepe inkepingen: spiegelbeeld van 'punt'
+      return 1 - 2 * Math.pow(Math.abs(Math.sin(phase / 2)), 4);
+    case 'trap': // getrapte terrassen; vaste stappen i.p.v. een vloeiende golf
+      return Math.round(s * 2.5) / 2.5;
+    case 'schelp': // asymmetrische golf: bolle rug, ingetrokken flank
+      return clamp((s + 0.35 * Math.sin(2 * phase)) / 1.18, -1, 1);
+    case 'bol': // brede volle lobben, net iets voller dan een zuivere sinus
+      return Math.sign(s) * Math.pow(Math.abs(s), 0.55);
     case 'golf':
     default:
       return s;
@@ -298,6 +312,8 @@ export const SECTION_FAMILIES = {
   ster: { unit: 'punten', min: 3, max: 16, make: (n) => polySection(n, true, 0.55) },
   bloem: { unit: 'blaadjes', min: 3, max: 16, make: (n) => polySection(n, false, 0.72) },
   lob: { unit: 'lobben', min: 3, max: 16, make: (n) => polySection(n, false, 0.62) },
+  tand: { unit: 'tanden', min: 4, max: 20, make: (n) => polySection(n, true, 0.84) },
+  golfrand: { unit: 'golven', min: 4, max: 20, make: (n) => polySection(n, false, 0.88) },
   vrij: { unit: 'punten', min: 3, max: 24, make: (n) => polySection(n, false) },
 };
 
@@ -325,6 +341,14 @@ export const SECTION_PRESETS = [
   familyPreset('ster', '✦ Ster', 'ster', 6),
   familyPreset('bloem', '❀ Bloem', 'bloem', 6),
   familyPreset('lob', '❍ Lobben', 'lob', 3),
+  familyPreset('tandwiel', '⚙ Tandwiel', 'tand', 10),
+  familyPreset('golfrand', '〜 Golfrand', 'golfrand', 12),
+  { id: 'druppel', label: '💧 Druppel', make: () => [
+    { a: 0, r: 1, sharp: true }, { a: 0.3, r: 0.72 }, { a: 0.5, r: 0.66 }, { a: 0.7, r: 0.72 },
+  ] },
+  { id: 'ei', label: '🥚 Ei', make: () => [
+    { a: 0, r: 1 }, { a: 0.25, r: 0.78 }, { a: 0.5, r: 0.86 }, { a: 0.75, r: 0.78 },
+  ] },
   familyPreset('vrij', '✎ Vrij tekenen', 'vrij', 8),
 ];
 
@@ -465,7 +489,42 @@ export const DEFAULT_SHAPE = {
   maxOverhang: 40,
 };
 
+// De vorm wordt per wijziging op drie plekken opgevraagd (bedieningspaneel,
+// printbaarheids-badge en de mesh-bouwer). Voor een zwaar versierde vaas kost
+// dat elk honderden milliseconden, dus delen ze hier één berekening. Alleen
+// parameters die de geometrie bepalen tellen mee in de sleutel: van filament
+// wisselen hoeft niets opnieuw te berekenen.
+const GEOMETRY_KEYS = [
+  ...Object.keys(DEFAULT_SHAPE).filter((k) => k !== 'sectionSym' && k !== 'sectionMirror'),
+  'layerHeight',
+  'vaseMode',
+].sort();
+
+const SHAPE_CACHE_SIZE = 8;
+const shapeCache = new Map();
+
+const shapeCacheKey = (params) => {
+  const p = { ...DEFAULT_SHAPE, ...params };
+  let key = '';
+  for (const k of GEOMETRY_KEYS) {
+    const v = p[k];
+    key += `${k}:${v !== null && typeof v === 'object' ? JSON.stringify(v) : v}|`;
+  }
+  return key;
+};
+
 export function createVaseShape(params) {
+  const key = shapeCacheKey(params);
+  const cached = shapeCache.get(key);
+  if (cached) return cached;
+  const shape = buildVaseShape(params);
+  shapeCache.set(key, shape);
+  // oudste eruit; een Map bewaart de invoegvolgorde
+  if (shapeCache.size > SHAPE_CACHE_SIZE) shapeCache.delete(shapeCache.keys().next().value);
+  return shape;
+}
+
+function buildVaseShape(params) {
   const p = { ...DEFAULT_SHAPE, ...params };
   const height = p.height;
   const wall = p.thickness;
@@ -608,6 +667,21 @@ export function createVaseShape(params) {
           + 0.6 * Math.sin(n2 * a + 0.7) * Math.sin(1.7 * m * t * TAU + 2.3);
         return s / 1.6;
       }
+      case 'diagonaal': // schuine ribbels: één richting, i.p.v. het kruis van 'ruit'
+        return Math.sin(n * a + m * t * TAU);
+      case 'hamerslag': {
+        // ondiepe overlappende deuken, als geslagen metaal: twee versprongen
+        // rasters over elkaar heen
+        const row = t * m;
+        const ri = Math.floor(row);
+        const off = ri % 2 ? Math.PI / n : 0;
+        const big = blob(Math.cos(n * (a - off)), Math.sin(Math.PI * (row - ri)), 1.2);
+        const n2 = Math.max(1, Math.round(n * 1.7));
+        const row2 = t * m * 1.7 + 0.5;
+        const ri2 = Math.floor(row2);
+        const small = blob(Math.cos(n2 * a), Math.sin(Math.PI * (row2 - ri2)), 1.4);
+        return (big * 0.65 + small * 0.35) * 2 - 1;
+      }
       default:
         return 0;
     }
@@ -624,6 +698,10 @@ export function createVaseShape(params) {
     // de doorsnede draait mee met de twist, anders staat de vorm los van het patroon
     const base = baseRadiusAt(t) * (section ? section.at(a) : 1);
     if (fade) scale *= groundFade(t);
+    // Zonder decoratie-schaal vallen alle termen hieronder toch weg; dit scheelt
+    // de dure velden (textuur, organic, bobbels) bij het meten van het kale
+    // silhouet en onderaan de vaas, waar de fade naar 0 loopt.
+    if (scale <= 0) return base;
 
     let factor = 1;
     if (facetStrength > 0) factor *= 1 + (facetField(a) - 1) * facetStrength * scale;
@@ -720,12 +798,13 @@ export function createVaseShape(params) {
     || facetStrength > 0 || bumpAmp !== 0 || textureAmp > 0 || rimAmp > 0;
 
   let detailScale = 1;
-  // Grootste schaal waarbij `bad` niet meer geldt; 12 stappen halveren is ruim
-  // nauwkeurig genoeg voor iets dat je toch niet ziet.
+  // Grootste schaal waarbij `bad` niet meer geldt. Elke stap kost een volledige
+  // overhang-meting, dus 8 halveringen: dat is 0.4% nauwkeurig op iets dat je
+  // met het oog toch niet ziet, en scheelt een derde van de rekentijd.
   const shrinkUntil = (bad, start) => {
     let lo = 0;
     let hi = start;
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 8; i++) {
       const mid = (lo + hi) / 2;
       if (bad(mid)) hi = mid;
       else lo = mid;
@@ -889,6 +968,11 @@ export const SILHOUETTES = [
   { id: 'zuil', label: '▮ Zuil', bottom: 0.96, top: 0.92, useLow: false, useHigh: false },
   { id: 'kegel', label: '△ Kegel', bottom: 0.5, top: 1.0, useLow: false, useHigh: false },
   { id: 'taps', label: '▽ Taps', bottom: 1.0, top: 0.6, useLow: false, useHigh: false },
+  { id: 'fles', label: '🍾 Fles', bottom: 0.72, low: 0.95, lowPos: 22, high: 0.42, highPos: 58, top: 0.34 },
+  { id: 'amfora', label: '⚱️ Amfora', bottom: 0.4, low: 0.92, lowPos: 38, high: 0.6, highPos: 78, top: 0.68 },
+  { id: 'bol', label: '⚪ Bol', bottom: 0.42, low: 0.98, lowPos: 42, high: 0.72, highPos: 78, top: 0.5 },
+  { id: 'trompet', label: '🎺 Trompet', bottom: 0.42, low: 0.5, lowPos: 30, high: 0.72, highPos: 72, top: 1.0 },
+  { id: 'karaf', label: '🫙 Karaf', bottom: 0.85, low: 0.92, lowPos: 45, high: 0.72, highPos: 80, top: 0.86 },
 ];
 
 /** Alle decoratie uit; elke preset zet hierop alleen aan wat hij nodig heeft. */
@@ -936,6 +1020,12 @@ export const DECOR_PRESETS = [
   { id: 'geweven', label: '▦ Geweven', values: decor({ textureType: 'geweven', textureScale: 26, textureDepth: 4 }) },
   { id: 'ruit', label: '◆ Ruit', values: decor({ textureType: 'ruit', textureScale: 30, textureDepth: 4 }) },
   { id: 'kartelrand', label: '⌣ Kartelrand', values: decor({ patternShape: 'groef', waveCount: 12, waveAmplitude: 5, rimWaveCount: 12, rimWaveDepth: 8 }) },
+  { id: 'terras', label: '◱ Terras', values: decor({ patternShape: 'trap', waveCount: 14, waveAmplitude: 7 }) },
+  { id: 'kerven', label: '⑃ Kerven', values: decor({ patternShape: 'kerf', waveCount: 22, waveAmplitude: 6 }) },
+  { id: 'schelp', label: '🐚 Schelp', values: decor({ patternShape: 'schelp', waveCount: 16, waveAmplitude: 8, twistAngle: 90 }) },
+  { id: 'kussen', label: '⬮ Kussen', values: decor({ patternShape: 'bol', waveCount: 8, waveAmplitude: 11 }) },
+  { id: 'diagonaal', label: '⁄ Diagonaal', values: decor({ textureType: 'diagonaal', textureScale: 28, textureDepth: 4 }) },
+  { id: 'hamerslag', label: '⬢ Hamerslag', values: decor({ textureType: 'hamerslag', textureScale: 22, textureDepth: 5 }) },
   { id: 'zacht', label: '◍ Zacht', values: decor({ organicAmount: 8, organicDetail: 3, organicFlow: 35, swayAmount: 5, swayTurns: 0.25 }) },
   { id: 'organisch', label: '🌿 Organisch', values: decor({ organicAmount: 16, organicDetail: 5, organicFlow: 80, swayAmount: 10, swayTurns: 0.5 }) },
   { id: 'wild', label: '🔥 Wild', values: decor({ organicAmount: 28, organicDetail: 8, organicFlow: 150, swayAmount: 18, swayTurns: 1 }) },
@@ -1005,9 +1095,13 @@ export function randomVaseParams(rnd = Math.random) {
   const snap = (v, s) => Math.round(v / s) * s;
 
   const silhouette = pick(SILHOUETTES);
-  const belly = snap(range(70, 150), 5);
+  // Eerst de hoogte kiezen, dan pas de buikdiameter daarvan afleiden. Andersom
+  // (buik × slankheid) loopt bijna altijd over de 250mm-limiet en wordt dan
+  // afgekapt, waardoor vrijwel elke vaas even groot uitvalt.
+  const height = snap(range(90, 235), 5);
   const slenderness = range(1.5, 2.9); // hoogte t.o.v. buikdiameter
-  const base = applySilhouette(silhouette, belly, belly * slenderness);
+  const belly = clamp(Math.round(height / slenderness), 45, PRINTER_LIMITS.maxDiameter);
+  const base = applySilhouette(silhouette, belly, height);
 
   // Tussenpunten variëren: soms eentje weg voor een rustige lijn die in één
   // vloeiende beweging doorloopt, soms juist eentje erbij voor meer karakter.
@@ -1055,11 +1149,23 @@ export function randomVaseParams(rnd = Math.random) {
     swayTurns: 0.5,
   };
 
-  // Doorsnede: meestal rond, soms een veelhoek of lobben voor een strakker karakter
-  if (chance(0.28)) {
-    const sides = pick([3, 4, 4, 5, 6, 6, 8]);
-    const sharp = chance(0.6);
-    const inner = chance(0.35) ? range(0.55, 0.8) : 1;
+  // Doorsnede: vaak rond, anders een veelhoek, ster, lob, tandwiel of golfrand.
+  // De 'inner' bepaalt het karakter: 1 = zuivere veelhoek, laag = uitgesproken
+  // ster, tussenin = zachte lobben of een fijne golfrand.
+  if (chance(0.4)) {
+    const kind = pick(['veelhoek', 'veelhoek', 'ster', 'lob', 'bloem', 'tand', 'golfrand']);
+    const sides = kind === 'tand' || kind === 'golfrand'
+      ? Math.round(range(6, 18))
+      : pick([3, 4, 4, 5, 6, 6, 8, 10, 12]);
+    const inner = {
+      veelhoek: 1,
+      ster: range(0.5, 0.7),
+      lob: range(0.58, 0.7),
+      bloem: range(0.68, 0.8),
+      tand: range(0.8, 0.9),
+      golfrand: range(0.86, 0.93),
+    }[kind];
+    const sharp = kind === 'veelhoek' ? chance(0.6) : kind === 'ster' || kind === 'tand';
     out.section = normalizeSection(polySection(sides, sharp, inner));
     out.sectionSym = sides;
   }
@@ -1084,7 +1190,10 @@ export function randomVaseParams(rnd = Math.random) {
   };
 
   if (style === 'patroon' || style === 'combi') {
-    out.patternShape = pick(['golf', 'ribbel', 'ribbel', 'groef', 'paneel', 'zaag', 'punt', 'kabel']);
+    out.patternShape = pick([
+      'golf', 'ribbel', 'ribbel', 'groef', 'paneel', 'zaag', 'punt', 'kabel',
+      'kerf', 'trap', 'schelp', 'bol',
+    ]);
     out.waveCount = out.patternShape === 'paneel' ? Math.round(range(4, 9)) : Math.round(range(8, 34));
     out.waveAmplitude = Math.max(2, Math.round(range(0.45, 0.95) * safePct(out.waveCount)));
     if (chance(0.55)) addTwist(300);
@@ -1113,7 +1222,7 @@ export function randomVaseParams(rnd = Math.random) {
     if (chance(0.3)) addTwist(180);
   }
   if (style === 'textuur') {
-    out.textureType = pick(['lijnen', 'ruit', 'noppen', 'schub', 'geweven', 'grof']);
+    out.textureType = pick(['lijnen', 'ruit', 'noppen', 'schub', 'geweven', 'grof', 'diagonaal', 'hamerslag']);
     out.textureScale = Math.round(range(14, 46));
     out.textureDepth = Math.max(2, Math.round(range(0.6, 1) * safePct(out.textureScale)));
   }
@@ -1129,7 +1238,7 @@ export function randomVaseParams(rnd = Math.random) {
 
   // Extra's die over elke stijl heen kunnen
   if (style !== 'textuur' && chance(0.25)) {
-    out.textureType = pick(['lijnen', 'ruit', 'noppen', 'geweven', 'grof']);
+    out.textureType = pick(['lijnen', 'ruit', 'noppen', 'geweven', 'grof', 'diagonaal', 'hamerslag']);
     out.textureScale = Math.round(range(18, 46));
     out.textureDepth = Math.max(1, Math.round(range(0.4, 0.8) * safePct(out.textureScale)));
   }
@@ -1148,6 +1257,22 @@ export function randomVaseParams(rnd = Math.random) {
   // rekent ook meteen alle decoratie en zijn eigen auto-limit-bisectie door,
   // en dat tientallen keren per klik zou "Verras me" merkbaar laten haperen.
   {
+    // Stap 1: de vaas slanker maken. Overhang is de hoek van de wand, dus
+    // dezelfde diameters over meer hoogte uitsmeren maakt hem vanzelf minder
+    // steil — en houdt het silhouet volledig intact. Dit gaat bewust vóór het
+    // afvlakken hieronder: dat laatste maakt van een mooie buik een cilinder.
+    // Hoogstens de helft erbij: anders wordt elke te steile vaas een slanke
+    // toren van 250mm en lijkt alles weer op elkaar.
+    const maxTall = Math.min(PRINTER_LIMITS.maxHeight, Math.round(out.height * 1.5));
+    for (let i = 0; i < 5; i++) {
+      if (estimateBaseOverhang(out) <= out.maxOverhang) break;
+      const taller = Math.min(maxTall, Math.round(out.height * 1.15));
+      if (taller <= out.height) break; // zo hoog mag hij niet meer worden
+      out.height = taller;
+    }
+
+    // Stap 2: pas als slanker maken niet meer kan, de diameters en de twist
+    // afvlakken richting het gemiddelde.
     const mean = out.profile.reduce((s, pt) => s + pt.d, 0) / out.profile.length;
     for (let i = 0; i < 12; i++) {
       if (estimateBaseOverhang(out) <= out.maxOverhang) break;

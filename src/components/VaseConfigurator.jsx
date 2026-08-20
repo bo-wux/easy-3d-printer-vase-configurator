@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import VaseControls from './VaseControls';
 import VaseViewer from './VaseViewer';
 import ExportButton from './ExportButton';
@@ -131,21 +131,31 @@ const VaseConfigurator = () => {
     [vaseParams, active]
   );
 
+  // Een zwaar versierde vaas doorrekenen kost honderden milliseconden. Met
+  // useDeferredValue blijft het slepen aan een schuif vloeiend: React tekent
+  // eerst de nieuwe schuifstand en pas daarna, met lagere prioriteit, de
+  // 3D-weergave. `busy` is waar zolang die achterstand er is.
+  const shapeParams = useDeferredValue(vaseParams);
+  const busy = shapeParams !== vaseParams;
+
+  // Eén berekening voor zowel de printbaarheids-badge als alle afleeswaarden in
+  // het bedieningspaneel — anders bouwt elk die dure vorm afzonderlijk op.
+  const shape = useMemo(() => createVaseShape(shapeParams), [shapeParams]);
+
   // Eén centrale plek voor "print dit niet zonder problemen" — als badge over
   // de 3D-preview, zodat je het altijd ziet (ongeacht welk tabblad open staat)
   // zonder dat dezelfde melding ook nog in de zijbalk en boven de exportknop
   // staat.
   const printIssues = useMemo(() => {
-    const shape = createVaseShape(vaseParams);
-    const maxDiameter = maxProfileDiameter(vaseParams);
-    const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && vaseParams.height <= PRINTER_LIMITS.maxHeight;
-    const tooSteep = shape.maxOverhangDeg > vaseParams.maxOverhang + 0.5;
+    const maxDiameter = maxProfileDiameter(shapeParams);
+    const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && shapeParams.height <= PRINTER_LIMITS.maxHeight;
+    const tooSteep = shape.maxOverhangDeg > shapeParams.maxOverhang + 0.5;
     return [
-      tooSteep && `Overhang van ${Math.round(shape.maxOverhangDeg)}° (limiet ${vaseParams.maxOverhang}°) — kan drijvende gebieden geven zonder supports. Verhoog "Max. overhang" of pas de vorm aan.`,
+      tooSteep && `Overhang van ${Math.round(shape.maxOverhangDeg)}° (limiet ${shapeParams.maxOverhang}°) — kan drijvende gebieden geven zonder supports. Verhoog "Max. overhang" of pas de vorm aan.`,
       !fitsBed && `Past niet op het bouwvolume (Ø${PRINTER_LIMITS.maxDiameter}mm × ${PRINTER_LIMITS.maxHeight}mm hoog).`,
-      vaseParams.autoLimit === false && 'Auto printbaar staat uit — bij diep reliëf kan de wand door zichzelf heen lopen en slicet de STL niet schoon.',
+      shapeParams.autoLimit === false && 'Auto printbaar staat uit — bij diep reliëf kan de wand door zichzelf heen lopen en slicet de STL niet schoon.',
     ].filter(Boolean);
-  }, [vaseParams]);
+  }, [shape, shapeParams]);
 
   const flash = (message, tone = 'ok') => setToast({ message, tone, id: Date.now() });
 
@@ -266,6 +276,7 @@ const VaseConfigurator = () => {
         <aside className="controls-panel">
           <VaseControls
             params={vaseParams}
+            shape={shape}
             onParamChange={updateParam}
             onParamsChange={updateParams}
             onUndo={undo}
@@ -276,7 +287,8 @@ const VaseConfigurator = () => {
         </aside>
 
         <div className="viewer-container">
-          <VaseViewer params={vaseParams} onMeshCreated={setMeshRef} onCaptureReady={handleCaptureReady} />
+          <VaseViewer params={shapeParams} onMeshCreated={setMeshRef} onCaptureReady={handleCaptureReady} />
+          {busy && <div className="viewer-busy" role="status">⏳ Bezig met bijwerken…</div>}
           {printIssues.length > 0 && (
             <div className="print-warning-badge" role="alert" title={printIssues.join(' ')}>
               <strong>⚠️ Waarschuwing</strong>

@@ -23,6 +23,8 @@ import {
   applySilhouette,
   randomVaseParams,
   PRINTER_LIMITS,
+  TEXTURES,
+  PATTERN_SHAPES,
 } from '../src/lib/vaseShape.js';
 
 const args = new Map(process.argv.slice(2).map((a) => a.replace(/^--/, '').split('=')));
@@ -383,8 +385,13 @@ add('ringen max', { ...base, ringCount: 40, ringAmount: 12 });
 add('bobbels max', { ...base, bumpCols: 24, bumpRows: 30, bumpDepth: 40 });
 add('deuken max', { ...base, bumpCols: 24, bumpRows: 30, bumpDepth: -40 });
 add('rand max', { ...base, rimWaveCount: 24, rimWaveDepth: 20 });
-for (const t of ['lijnen', 'ruit', 'noppen', 'schub', 'geweven', 'grof']) {
-  add(`textuur ${t}`, { ...base, textureType: t, textureScale: 64, textureDepth: 10 });
+for (const t of TEXTURES.filter((x) => x.id !== 'geen')) {
+  add(`textuur ${t.id}`, { ...base, textureType: t.id, textureScale: 64, textureDepth: 10 });
+}
+// elke patroonvorm op zijn diepste stand: hier loopt de binnenwand het snelst
+// in zichzelf als een profiel te scherpe flanken heeft
+for (const s of PATTERN_SHAPES) {
+  add(`patroon ${s.id}`, { ...base, patternShape: s.id, waveCount: 24, waveAmplitude: 25 });
 }
 add('organisch max', {
   ...base, organicAmount: 40, organicDetail: 10, organicFlow: 200, swayAmount: 40, swayTurns: 3, seed: 7,

@@ -301,6 +301,24 @@ body {
   border-top: none;
 }
 
+/* versieringsblok waarvan de schuifjes op 0 staan: doet zichtbaar niets */
+.section-title.off {
+  color: var(--muted);
+}
+
+.off-tag {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+}
+
 /* ---------- chips ---------- */
 
 .chip-row {
@@ -792,6 +810,26 @@ body {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+.viewer-busy {
+  position: absolute;
+  top: 0.9rem;
+  left: 0.9rem;
+  padding: 0.35rem 0.7rem;
+  background: rgba(12, 14, 19, 0.75);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  font-size: 0.7rem;
+  color: var(--muted);
+  pointer-events: none;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 /* ---------- printbaarheid-badge (over de 3D-preview) ---------- */

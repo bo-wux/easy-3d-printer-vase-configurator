@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  createVaseShape,
   applySilhouette,
   randomVaseParams,
   randomSeed,
@@ -122,11 +121,13 @@ const Chips = ({ options, value, onSelect, compare, thumb }) => (
   </div>
 );
 
-const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, canUndo, canRedo }) => {
+// `shape` komt van de configurator: die rekent hem één keer uit (op een licht
+// vertraagde parameterset) en deelt hem met de 3D-weergave, zodat het slepen
+// aan een schuif niet op dezelfde dure berekening hoeft te wachten.
+const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, onRedo, canUndo, canRedo }) => {
   const [tab, setTab] = useState('vorm');
   const [node, setNode] = useState(1);
   const [pen, setPen] = useState({ profile: false, section: false });
-  const shape = useMemo(() => createVaseShape(params), [params]);
   const profile = useMemo(() => profilePoints(params), [params]);
 
   const overhang = Math.round(shape.maxOverhangDeg);
@@ -288,6 +289,32 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
 
   const layers = Math.ceil(params.height / params.layerHeight);
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
+
+  // Elk versieringsblok heeft een "aan"-voorwaarde. Staat die op nul, dan doen
+  // de schuifjes eronder zichtbaar niets — dat is precies wat verwarrend was na
+  // het kiezen van een Stijl, want die zet alle andere versiering uit.
+  const patternOn = params.waveCount > 0 && params.waveAmplitude > 0;
+  const textureOn = (params.textureType || 'geen') !== 'geen' && params.textureDepth > 0;
+  const facetOn = params.facetCount >= 3 && params.facetStrength > 0;
+  const ringsOn = params.ringCount > 0 && params.ringAmount > 0;
+  const bumpsOn = params.bumpCols > 0 && params.bumpDepth !== 0;
+  const rimOn = params.rimWaveCount >= 2 && params.rimWaveDepth > 0;
+
+  // Een vorm kiezen terwijl het blok uit staat, zet het meteen aan met een
+  // zichtbare waarde — anders klik je op iets en gebeurt er niets.
+  const pickPattern = (s) => {
+    if (patternOn) { onParamChange('patternShape', s.id); return; }
+    onParamsChange({
+      patternShape: s.id,
+      waveCount: params.waveCount > 0 ? params.waveCount : (s.id === 'paneel' ? 6 : 16),
+      waveAmplitude: params.waveAmplitude > 0 ? params.waveAmplitude : 6,
+    });
+  };
+
+  const pickTexture = (t) => {
+    if (t.id === 'geen' || params.textureDepth > 0) { onParamChange('textureType', t.id); return; }
+    onParamsChange({ textureType: t.id, textureDepth: 4 });
+  };
   // dieper dan dit loopt het bobbelraster in zichzelf, dus houdt de slider ook op
   const bumpMax = Math.max(1, shape.bumpMaxPercent);
   const bumpDepth = Math.min(bumpMax, Math.max(-bumpMax, params.bumpDepth));
@@ -487,22 +514,34 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
           {tab === 'patroon' && (
             <>
               <h3 className="section-title full">Stijl</h3>
+              <p className="control-hint full">
+                Eén klik zet een complete versiering — en wist alles wat op de tabbladen
+                Patroon, Textuur en Organisch aan stond.
+              </p>
               <Chips
                 options={DECOR_PRESETS}
                 onSelect={(preset) => onParamsChange(preset.values)}
                 compare={(preset) => matches(preset.values)}
               />
 
-              <h3 className="section-title full">Profiel</h3>
+              <h3 className={`section-title full${patternOn ? '' : ' off'}`}>
+                Profiel {!patternOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Chips
                 options={PATTERN_SHAPES}
-                value={params.patternShape}
-                onSelect={(s) => onParamChange('patternShape', s.id)}
+                value={patternOn ? params.patternShape : null}
+                onSelect={pickPattern}
               />
               <Slider id="waveCount" label="Herhalingen" min={0} max={48} step={1}
                 value={params.waveCount} onChange={onParamChange} />
               <Slider id="waveAmplitude" label="Diepte" min={0} max={25} step={1} unit="%"
                 value={params.waveAmplitude} onChange={onParamChange} />
+              {!patternOn && (
+                <p className="control-hint full">
+                  Herhalingen of Diepte staat op 0, dus je ziet nog niets. Klik een profiel
+                  hierboven om het patroon aan te zetten.
+                </p>
+              )}
 
               <h3 className="section-title full">Twist</h3>
               <Chips
@@ -518,11 +557,23 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
                   hint="draait op en weer terug" />
               )}
 
-              <h3 className="section-title full">Facetten & ringen</h3>
+              <h3 className={`section-title full${facetOn ? '' : ' off'}`}>
+                Facetten {!facetOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Slider id="facetCount" label="Facetten" min={0} max={16} step={1}
                 value={params.facetCount} onChange={onParamChange} hint="0 = rond, 3+ = veelhoek" />
               <Slider id="facetStrength" label="Facet sterkte" min={0} max={100} step={5} unit="%"
                 value={params.facetStrength} onChange={onParamChange} />
+              {facetOn && params.section && (
+                <p className="control-hint full">
+                  Let op: je hebt óók een doorsnede ingesteld. Facetten vermenigvuldigen daarmee,
+                  wat een onrustige vorm geeft — kies bij voorkeur één van beide.
+                </p>
+              )}
+
+              <h3 className={`section-title full${ringsOn ? '' : ' off'}`}>
+                Ringen {!ringsOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Slider id="ringCount" label="Ringen" min={0} max={40} step={1}
                 value={params.ringCount} onChange={onParamChange} hint="horizontale banden" />
               <Slider id="ringAmount" label="Ring diepte" min={0} max={12} step={1} unit="%"
@@ -532,11 +583,17 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
 
           {tab === 'textuur' && (
             <>
-              <h3 className="section-title full">Oppervlaktetextuur</h3>
+              <h3 className={`section-title full${textureOn ? '' : ' off'}`}>
+                Oppervlaktetextuur {!textureOn && <span className="off-tag">staat uit</span>}
+              </h3>
+              <p className="control-hint full">
+                Fijn reliëf bovenop het patroon van het tabblad Patroon — die twee stapelen
+                op elkaar. Wordt het onrustig, zet er dan één op 0.
+              </p>
               <Chips
                 options={TEXTURES}
                 value={params.textureType || 'geen'}
-                onSelect={(t) => onParamChange('textureType', t.id)}
+                onSelect={pickTexture}
               />
               {params.textureType !== 'geen' && (
                 <>
@@ -547,7 +604,9 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
                 </>
               )}
 
-              <h3 className="section-title full">Bobbels</h3>
+              <h3 className={`section-title full${bumpsOn ? '' : ' off'}`}>
+                Bobbels {!bumpsOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Slider id="bumpCols" label="Rondom" min={0} max={24} step={1}
                 value={params.bumpCols} onChange={onParamChange} hint="0 = uit" />
               <Slider id="bumpRows" label="Rijen" min={1} max={30} step={1}
@@ -557,7 +616,9 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
               <Toggle label="Versprongen rijen" checked={params.bumpStagger !== false}
                 onChange={(v) => onParamChange('bumpStagger', v)} />
 
-              <h3 className="section-title full">Golvende rand</h3>
+              <h3 className={`section-title full${rimOn ? '' : ' off'}`}>
+                Golvende rand {!rimOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Slider id="rimWaveCount" label="Golven" min={0} max={24} step={1}
                 value={params.rimWaveCount} onChange={onParamChange} hint="0 of 1 = rechte rand" />
               <Slider id="rimWaveDepth" label="Diepte" min={0} max={20} step={1} unit="%"
