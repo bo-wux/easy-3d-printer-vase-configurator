@@ -343,9 +343,6 @@ export const SECTION_PRESETS = [
   familyPreset('lob', '❍ Lobben', 'lob', 3),
   familyPreset('tandwiel', '⚙ Tandwiel', 'tand', 10),
   familyPreset('golfrand', '〜 Golfrand', 'golfrand', 12),
-  { id: 'druppel', label: '💧 Druppel', make: () => [
-    { a: 0, r: 1, sharp: true }, { a: 0.3, r: 0.72 }, { a: 0.5, r: 0.66 }, { a: 0.7, r: 0.72 },
-  ] },
   { id: 'ei', label: '🥚 Ei', make: () => [
     { a: 0, r: 1 }, { a: 0.25, r: 0.78 }, { a: 0.5, r: 0.86 }, { a: 0.75, r: 0.78 },
   ] },
@@ -973,6 +970,8 @@ export const SILHOUETTES = [
   { id: 'bol', label: '⚪ Bol', bottom: 0.42, low: 0.98, lowPos: 42, high: 0.72, highPos: 78, top: 0.5 },
   { id: 'trompet', label: '🎺 Trompet', bottom: 0.42, low: 0.5, lowPos: 30, high: 0.72, highPos: 72, top: 1.0 },
   { id: 'karaf', label: '🫙 Karaf', bottom: 0.85, low: 0.92, lowPos: 45, high: 0.72, highPos: 80, top: 0.86 },
+  // buik, taille, en dan weer breder: het enige silhouet dat twee keer bolt
+  { id: 'kalebas', label: '🎃 Kalebas', bottom: 0.5, low: 1.0, lowPos: 30, high: 0.55, highPos: 64, top: 0.82 },
 ];
 
 /** Alle decoratie uit; elke preset zet hierop alleen aan wat hij nodig heeft. */
@@ -1001,34 +1000,51 @@ const NO_DECOR = {
 
 const decor = (values) => ({ ...NO_DECOR, ...values });
 
-/** Decoratie-stijlen: zetten alleen de patroon-/textuur-/organic-parameters. */
+/**
+ * Decoratie-stijlen: zetten in één klik alle patroon-/textuur-/organic-waarden.
+ *
+ * `group` bepaalt op welk tabblad een stijl te zien is. Een stijl vervangt
+ * altijd álle versiering — hij hoort dus nergens echt "thuis" — maar door hem
+ * te tonen bij de schuifjes die hij daarna beheerst, blijft duidelijk waar je
+ * verder moet zoeken als je hem wilt bijstellen. 'glad' wist alles en staat
+ * daarom overal.
+ */
 export const DECOR_PRESETS = [
-  { id: 'glad', label: '○ Glad', values: decor({}) },
-  { id: 'ribbels', label: '≣ Ribbels', values: decor({ patternShape: 'ribbel', waveCount: 20, waveAmplitude: 6 }) },
-  { id: 'cannelure', label: '⌇ Cannelure', values: decor({ patternShape: 'groef', waveCount: 14, waveAmplitude: 7 }) },
-  { id: 'twist', label: '🌀 Twist', values: decor({ patternShape: 'ribbel', waveCount: 12, waveAmplitude: 8, twistAngle: 180 }) },
-  { id: 'vlecht', label: '🪢 Vlecht', values: decor({ patternShape: 'kabel', waveCount: 10, waveAmplitude: 9, twistAngle: 220, twistMode: 'heen', twistWaves: 2 }) },
-  { id: 'facet', label: '⬡ Facet', values: decor({ facetCount: 8, facetStrength: 80 }) },
-  { id: 'kristal', label: '💎 Kristal', values: decor({ facetCount: 6, facetStrength: 100, twistAngle: 90 }) },
-  { id: 'ster', label: '✦ Ster', values: decor({ patternShape: 'ster', waveCount: 8, waveAmplitude: 12 }) },
-  { id: 'zaagtand', label: '⩘ Zaagtand', values: decor({ patternShape: 'zaag', waveCount: 18, waveAmplitude: 6, twistAngle: 120 }) },
-  { id: 'ringen', label: '☰ Ringen', values: decor({ ringCount: 14, ringAmount: 5 }) },
-  { id: 'paneel', label: '▤ Paneel', values: decor({ patternShape: 'paneel', waveCount: 6, waveAmplitude: 9 }) },
-  { id: 'bobbels', label: '⬤ Bobbels', values: decor({ bumpCols: 10, bumpRows: 10, bumpDepth: 8 }) },
-  { id: 'deuken', label: '◌ Deuken', values: decor({ bumpCols: 8, bumpRows: 8, bumpDepth: -7 }) },
-  { id: 'schubben', label: '🐟 Schubben', values: decor({ textureType: 'schub', textureScale: 28, textureDepth: 4 }) },
-  { id: 'geweven', label: '▦ Geweven', values: decor({ textureType: 'geweven', textureScale: 26, textureDepth: 4 }) },
-  { id: 'ruit', label: '◆ Ruit', values: decor({ textureType: 'ruit', textureScale: 30, textureDepth: 4 }) },
-  { id: 'kartelrand', label: '⌣ Kartelrand', values: decor({ patternShape: 'groef', waveCount: 12, waveAmplitude: 5, rimWaveCount: 12, rimWaveDepth: 8 }) },
-  { id: 'terras', label: '◱ Terras', values: decor({ patternShape: 'trap', waveCount: 14, waveAmplitude: 7 }) },
-  { id: 'kerven', label: '⑃ Kerven', values: decor({ patternShape: 'kerf', waveCount: 22, waveAmplitude: 6 }) },
-  { id: 'schelp', label: '🐚 Schelp', values: decor({ patternShape: 'schelp', waveCount: 16, waveAmplitude: 8, twistAngle: 90 }) },
-  { id: 'kussen', label: '⬮ Kussen', values: decor({ patternShape: 'bol', waveCount: 8, waveAmplitude: 11 }) },
-  { id: 'diagonaal', label: '⁄ Diagonaal', values: decor({ textureType: 'diagonaal', textureScale: 28, textureDepth: 4 }) },
-  { id: 'hamerslag', label: '⬢ Hamerslag', values: decor({ textureType: 'hamerslag', textureScale: 22, textureDepth: 5 }) },
-  { id: 'zacht', label: '◍ Zacht', values: decor({ organicAmount: 8, organicDetail: 3, organicFlow: 35, swayAmount: 5, swayTurns: 0.25 }) },
-  { id: 'organisch', label: '🌿 Organisch', values: decor({ organicAmount: 16, organicDetail: 5, organicFlow: 80, swayAmount: 10, swayTurns: 0.5 }) },
-  { id: 'wild', label: '🔥 Wild', values: decor({ organicAmount: 28, organicDetail: 8, organicFlow: 150, swayAmount: 18, swayTurns: 1 }) },
+  { id: 'glad', label: '○ Glad', group: 'alle', values: decor({}) },
+
+  // groep patroon: grote, regelmatige vormen rondom de vaas
+  { id: 'ribbels', label: '≣ Ribbels', group: 'patroon', values: decor({ patternShape: 'ribbel', waveCount: 20, waveAmplitude: 6 }) },
+  { id: 'cannelure', label: '⌇ Cannelure', group: 'patroon', values: decor({ patternShape: 'groef', waveCount: 14, waveAmplitude: 7 }) },
+  { id: 'twist', label: '🌀 Twist', group: 'patroon', values: decor({ patternShape: 'ribbel', waveCount: 12, waveAmplitude: 8, twistAngle: 180 }) },
+  { id: 'vlecht', label: '🪢 Vlecht', group: 'patroon', values: decor({ patternShape: 'kabel', waveCount: 10, waveAmplitude: 9, twistAngle: 220, twistMode: 'heen', twistWaves: 2 }) },
+  { id: 'facet', label: '⬡ Facet', group: 'patroon', values: decor({ facetCount: 8, facetStrength: 80 }) },
+  { id: 'kristal', label: '💎 Kristal', group: 'patroon', values: decor({ facetCount: 6, facetStrength: 100, twistAngle: 90 }) },
+  { id: 'ster', label: '✦ Ster', group: 'patroon', values: decor({ patternShape: 'ster', waveCount: 8, waveAmplitude: 12 }) },
+  { id: 'zaagtand', label: '⩘ Zaagtand', group: 'patroon', values: decor({ patternShape: 'zaag', waveCount: 18, waveAmplitude: 6, twistAngle: 120 }) },
+  { id: 'ringen', label: '☰ Ringen', group: 'patroon', values: decor({ ringCount: 14, ringAmount: 5 }) },
+  { id: 'paneel', label: '▤ Paneel', group: 'patroon', values: decor({ patternShape: 'paneel', waveCount: 6, waveAmplitude: 9 }) },
+  { id: 'terras', label: '◱ Terras', group: 'patroon', values: decor({ patternShape: 'trap', waveCount: 14, waveAmplitude: 7 }) },
+  { id: 'kerven', label: '⑃ Kerven', group: 'patroon', values: decor({ patternShape: 'kerf', waveCount: 22, waveAmplitude: 6 }) },
+  { id: 'schelp', label: '🐚 Schelp', group: 'patroon', values: decor({ patternShape: 'schelp', waveCount: 16, waveAmplitude: 8, twistAngle: 90 }) },
+  { id: 'kussen', label: '⬮ Kussen', group: 'patroon', values: decor({ patternShape: 'bol', waveCount: 8, waveAmplitude: 11 }) },
+
+  // groep textuur: fijn oppervlaktereliëf, bobbels en de rand
+  { id: 'bobbels', label: '⬤ Bobbels', group: 'textuur', values: decor({ bumpCols: 10, bumpRows: 10, bumpDepth: 8 }) },
+  { id: 'deuken', label: '◌ Deuken', group: 'textuur', values: decor({ bumpCols: 8, bumpRows: 8, bumpDepth: -7 }) },
+  { id: 'schubben', label: '🐟 Schubben', group: 'textuur', values: decor({ textureType: 'schub', textureScale: 28, textureDepth: 4 }) },
+  { id: 'geweven', label: '▦ Geweven', group: 'textuur', values: decor({ textureType: 'geweven', textureScale: 26, textureDepth: 4 }) },
+  { id: 'ruit', label: '◆ Ruit', group: 'textuur', values: decor({ textureType: 'ruit', textureScale: 30, textureDepth: 4 }) },
+  { id: 'diagonaal', label: '⁄ Diagonaal', group: 'textuur', values: decor({ textureType: 'diagonaal', textureScale: 28, textureDepth: 4 }) },
+  { id: 'hamerslag', label: '⬢ Hamerslag', group: 'textuur', values: decor({ textureType: 'hamerslag', textureScale: 22, textureDepth: 5 }) },
+  { id: 'kartelrand', label: '⌣ Kartelrand', group: 'textuur', values: decor({ patternShape: 'groef', waveCount: 12, waveAmplitude: 5, rimWaveCount: 12, rimWaveDepth: 8 }) },
+
+  // groep organisch: onregelmatig, asymmetrisch, met de hand geknepen
+  { id: 'zacht', label: '◍ Zacht', group: 'organisch', values: decor({ organicAmount: 8, organicDetail: 3, organicFlow: 35, swayAmount: 5, swayTurns: 0.25 }) },
+  { id: 'organisch', label: '🌿 Organisch', group: 'organisch', values: decor({ organicAmount: 16, organicDetail: 5, organicFlow: 80, swayAmount: 10, swayTurns: 0.5 }) },
+  { id: 'wild', label: '🔥 Wild', group: 'organisch', values: decor({ organicAmount: 28, organicDetail: 8, organicFlow: 150, swayAmount: 18, swayTurns: 1 }) },
+  { id: 'deining', label: '〰 Deining', group: 'organisch', values: decor({ organicAmount: 12, organicDetail: 2, organicFlow: 140, swayAmount: 0, swayTurns: 0 }) },
+  { id: 'knoest', label: '🪵 Knoest', group: 'organisch', values: decor({ organicAmount: 20, organicDetail: 10, organicFlow: 25, swayAmount: 4, swayTurns: 0.25 }) },
+  { id: 'leunend', label: '🍃 Leunend', group: 'organisch', values: decor({ organicAmount: 5, organicDetail: 3, organicFlow: 20, swayAmount: 26, swayTurns: 0.5 }) },
 ];
 
 export const randomSeed = () => Math.floor(Math.random() * 100000) + 1;

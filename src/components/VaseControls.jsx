@@ -299,6 +299,16 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
   const ringsOn = params.ringCount > 0 && params.ringAmount > 0;
   const bumpsOn = params.bumpCols > 0 && params.bumpDepth !== 0;
   const rimOn = params.rimWaveCount >= 2 && params.rimWaveDepth > 0;
+  const organicOn = params.organicAmount > 0;
+  const swayOn = params.swayAmount > 0;
+  // Twist draait het patroon en de doorsnede mee omhoog. Is er niets
+  // hoekafhankelijks, dan is een gedraaide vaas niet van een rechte te
+  // onderscheiden. Ringen tellen niet mee: die lopen horizontaal rond.
+  const twistHasEffect = patternOn || facetOn || bumpsOn || textureOn || organicOn || !!params.section;
+  const twistOn = params.twistAngle !== 0 && twistHasEffect;
+  // De seed voedt alleen het toevalspatroon van de organische vervorming en de
+  // scheefheid; staan die op 0, dan verandert een andere seed helemaal niets.
+  const seedMatters = organicOn || swayOn;
 
   // Een vorm kiezen terwijl het blok uit staat, zet het meteen aan met een
   // zichtbare waarde — anders klik je op iets en gebeurt er niets.
@@ -315,6 +325,27 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
     if (t.id === 'geen' || params.textureDepth > 0) { onParamChange('textureType', t.id); return; }
     onParamsChange({ textureType: t.id, textureDepth: 4 });
   };
+
+  // Stijlblok per tabblad. Een stijl vervangt altijd alle versiering, maar door
+  // alleen de stijlen te tonen die dít tabblad daarna bedienen, staat 'organisch'
+  // niet langer onder Patroon en zoek je een aanpassing waar je hem verwacht.
+  // Bewust een gewone functie en geen component: een component die binnen
+  // VaseControls wordt gedefinieerd is bij elke render een nieuw type, waardoor
+  // React de hele chip-rij telkens opnieuw opbouwt.
+  const stylePresets = (group) => (
+    <>
+      <h3 className="section-title full">Stijl</h3>
+      <p className="control-hint full">
+        Eén klik zet een complete versiering — en wist wat er op de andere
+        versieringstabbladen aan stond.
+      </p>
+      <Chips
+        options={DECOR_PRESETS.filter((p) => p.group === group || p.group === 'alle')}
+        onSelect={(preset) => onParamsChange(preset.values)}
+        compare={(preset) => matches(preset.values)}
+      />
+    </>
+  );
   // dieper dan dit loopt het bobbelraster in zichzelf, dus houdt de slider ook op
   const bumpMax = Math.max(1, shape.bumpMaxPercent);
   const bumpDepth = Math.min(bumpMax, Math.max(-bumpMax, params.bumpDepth));
@@ -325,9 +356,9 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
         <button type="button" className="action-button primary" onClick={() => onParamsChange(randomVaseParams())}>
           🎲 Verras me
         </button>
-        <button type="button" className="action-button" onClick={() => onParamsChange({ seed: randomSeed() })}>
-          🌱 Andere seed
-        </button>
+        {/* "Andere seed" stond hier, maar werkt alleen op de organische
+            vervorming — hij staat nu op het tabblad Organisch, bij de schuifjes
+            die hij daadwerkelijk beïnvloedt. */}
         <button type="button" className="action-button icon" onClick={onUndo} disabled={!canUndo}
           title="Ongedaan maken (Ctrl+Z)">↶</button>
         <button type="button" className="action-button icon" onClick={onRedo} disabled={!canRedo}
@@ -513,16 +544,7 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
 
           {tab === 'patroon' && (
             <>
-              <h3 className="section-title full">Stijl</h3>
-              <p className="control-hint full">
-                Eén klik zet een complete versiering — en wist alles wat op de tabbladen
-                Patroon, Textuur en Organisch aan stond.
-              </p>
-              <Chips
-                options={DECOR_PRESETS}
-                onSelect={(preset) => onParamsChange(preset.values)}
-                compare={(preset) => matches(preset.values)}
-              />
+              {stylePresets('patroon')}
 
               <h3 className={`section-title full${patternOn ? '' : ' off'}`}>
                 Profiel {!patternOn && <span className="off-tag">staat uit</span>}
@@ -543,7 +565,9 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
                 </p>
               )}
 
-              <h3 className="section-title full">Twist</h3>
+              <h3 className={`section-title full${twistOn ? '' : ' off'}`}>
+                Twist {!twistOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Chips
                 options={[{ id: 'lineair', label: '↗ Doorlopend' }, { id: 'heen', label: '↺ Heen en terug' }]}
                 value={params.twistMode || 'lineair'}
@@ -555,6 +579,13 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
                 <Slider id="twistWaves" label="Keerpunten" min={1} max={4} step={1} unit="×"
                   value={params.twistWaves ?? 1} onChange={onParamChange}
                   hint="draait op en weer terug" />
+              )}
+              {params.twistAngle !== 0 && !twistHasEffect && (
+                <p className="control-hint full">
+                  Twist draait de versiering mee omhoog, maar er is nog niets om te draaien:
+                  een gladde ronde vaas ziet er gedraaid precies hetzelfde uit. Zet een
+                  patroon, textuur of doorsnede aan.
+                </p>
               )}
 
               <h3 className={`section-title full${facetOn ? '' : ' off'}`}>
@@ -583,6 +614,8 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
 
           {tab === 'textuur' && (
             <>
+              {stylePresets('textuur')}
+
               <h3 className={`section-title full${textureOn ? '' : ' off'}`}>
                 Oppervlaktetextuur {!textureOn && <span className="off-tag">staat uit</span>}
               </h3>
@@ -628,19 +661,50 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
 
           {tab === 'organisch' && (
             <>
-              <h3 className="section-title full">Vrije vervorming</h3>
+              {stylePresets('organisch')}
+
+              <h3 className={`section-title full${organicOn ? '' : ' off'}`}>
+                Vrije vervorming {!organicOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Slider id="organicAmount" label="Vervorming" min={0} max={40} step={1} unit="%"
                 value={params.organicAmount} onChange={onParamChange} hint="afwijking van rond" />
               <Slider id="organicDetail" label="Detail" min={1} max={10} step={1}
                 value={params.organicDetail} onChange={onParamChange} hint="grote bulten ↔ kleine" />
               <Slider id="organicFlow" label="Verloop" min={0} max={200} step={5} unit="%"
                 value={params.organicFlow} onChange={onParamChange} hint="0 = kolom, hoog = kronkelt" />
-              <Slider id="seed" label="Seed" min={1} max={99999} step={1}
-                value={params.seed} onChange={onParamChange} hint="ander getal = andere vorm" />
+
+              <h3 className={`section-title full${swayOn ? '' : ' off'}`}>
+                Scheefheid {!swayOn && <span className="off-tag">staat uit</span>}
+              </h3>
               <Slider id="swayAmount" label="Scheefheid" min={0} max={40} step={1} unit="%"
                 value={params.swayAmount} onChange={onParamChange} hint="hartlijn wijkt af" />
               <Slider id="swayTurns" label="Scheef draai" min={0} max={3} step={0.25} unit="×"
                 value={params.swayTurns} onChange={onParamChange} hint="0 = leunt recht, >0 = krult" />
+
+              {/* De seed hoort hier: hij bepaalt alleen het toevalspatroon van de
+                  vervorming en de scheefheid hierboven, nergens anders. */}
+              <h3 className="section-title full">Toeval</h3>
+              <Slider id="seed" label="Seed" min={1} max={99999} step={1}
+                value={params.seed} onChange={onParamChange} hint="ander getal = andere vorm" />
+              <div className="full chip-row">
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() => onParamChange('seed', randomSeed())}
+                  disabled={!seedMatters}
+                  title={seedMatters
+                    ? 'Zelfde instellingen, ander toevalspatroon'
+                    : 'Doet niets zolang Vervorming en Scheefheid op 0 staan'}
+                >
+                  🌱 Andere seed
+                </button>
+              </div>
+              {!seedMatters && (
+                <p className="control-hint full">
+                  De seed doet pas iets zodra Vervorming of Scheefheid boven 0 staat —
+                  alleen die twee gebruiken toeval.
+                </p>
+              )}
             </>
           )}
 
