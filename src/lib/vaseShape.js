@@ -76,6 +76,9 @@ export const PATTERN_SHAPES = [
   { id: 'trap', label: 'Trap' },
   { id: 'schelp', label: 'Schelp' },
   { id: 'bol', label: 'Bol' },
+  { id: 'vlecht', label: 'Vlecht' },
+  { id: 'diamant', label: 'Diamant' },
+  { id: 'visgraat', label: 'Visgraat' },
 ];
 
 // Fijne oppervlaktetexturen (bovenop het patroon)
@@ -91,8 +94,17 @@ export const TEXTURES = [
   { id: 'hamerslag', label: '⬢ Hamerslag' },
 ];
 
-// Alle profielen leveren een waarde in [-1, 1]
-function patternProfile(shape, phase) {
+/**
+ * Patronen die niet alleen van de hoek maar ook van de hoogte afhangen. Alleen
+ * daarmee kun je twee kanten op laten lopen — een echte vlecht of ruit ontstaat
+ * pas als er iets linksom én iets rechtsom draait.
+ */
+export const HEIGHT_PATTERNS = new Set(['vlecht', 'diamant', 'visgraat']);
+
+// Alle profielen leveren een waarde in [-1, 1].
+// `w` is de fase langs de hoogte; alleen de patronen uit HEIGHT_PATTERNS
+// gebruiken hem.
+function patternProfile(shape, phase, w = 0) {
   const s = Math.sin(phase);
   switch (shape) {
     case 'ribbel': // bolle ribben met vlakke tussenruimte
@@ -117,6 +129,25 @@ function patternProfile(shape, phase) {
       return clamp((s + 0.35 * Math.sin(2 * phase)) / 1.18, -1, 1);
     case 'bol': // brede volle lobben, net iets voller dan een zuivere sinus
       return Math.sign(s) * Math.pow(Math.abs(s), 0.55);
+    case 'vlecht': {
+      // Twee strengen die tegengesteld om de vaas draaien. De zachte maximum
+      // laat steeds de bovenste streng zien, precies zoals bij echt vlechtwerk
+      // de ene streng over de andere heen valt.
+      const a = Math.sin(phase + w);
+      const b = Math.sin(phase - w);
+      return clamp((a + b + Math.abs(a - b)) / 2, -1, 1);
+    }
+    case 'diamant':
+      // Dezelfde twee strengen, maar vermenigvuldigd: waar ze elkaar kruisen
+      // ontstaat een ruitvormig vlak.
+      return clamp(2 * Math.sin(phase + w) * Math.sin(phase - w), -1, 1);
+    case 'visgraat': {
+      // De helling kantelt vloeiend heen en weer, als een visgraatvloer.
+      // Bewust een driehoeksgolf en geen harde omslag: een sprong in de hoogte
+      // zou een richel geven die de overhangmeting meteen dichtknijpt.
+      const tri = (2 / Math.PI) * Math.asin(clamp(Math.sin(w), -1, 1));
+      return Math.sin(phase + tri * Math.PI);
+    }
     case 'golf':
     default:
       return s;
@@ -633,6 +664,18 @@ function buildVaseShape(params) {
     ? Math.min(p.waveAmplitude / 100, safeAmplitudeFraction(waveCount, refRadius, wall))
     : 0;
 
+  // Patronen die met de hoogte meelopen (vlecht, diamant, visgraat) hebben een
+  // verticale herhaling nodig. Die kiezen we zo dat de vakken ongeveer vierkant
+  // blijven, anders worden de strengen uitgerekte slierten.
+  // De 0.45 rekt de vakken uit tot langgerekte diagonalen. Vierkante vakken
+  // lopen verticaal te snel op: de auto-limiet knijpt het reliëf dan tot een
+  // kwart terug en je ziet nauwelijks meer wat je instelt. Uitgerekt oogt het
+  // bovendien meer als echt vlechtwerk dan als een dambord.
+  const heightPattern = waveAmp > 0 && HEIGHT_PATTERNS.has(p.patternShape);
+  const patternRows = heightPattern
+    ? clamp(Math.round((waveCount * height * 0.45) / (TAU * refRadius)), 1, 40)
+    : 0;
+
   // Facetten: veelhoek-doorsnede, genormaliseerd rond straal 1
   const facetCount = Math.round(p.facetCount);
   const facetStrength = facetCount >= 3 ? clamp(p.facetStrength / 100, 0, 1) : 0;
@@ -794,7 +837,9 @@ function buildVaseShape(params) {
     if (ringAmount > 0) factor *= 1 + Math.sin(t * TAU * ringCount) * ringAmount * scale;
 
     let r = base * factor;
-    if (waveAmp > 0) r += patternProfile(p.patternShape, a * waveCount) * waveAmp * base * scale;
+    if (waveAmp > 0) {
+      r += patternProfile(p.patternShape, a * waveCount, patternRows * t * TAU) * waveAmp * base * scale;
+    }
     if (bumpAmp !== 0) r += bumpField(a, t) * bumpAmp * base * scale;
     if (textureAmp > 0) r += textureField(a, t) * textureAmp * base * scale;
     if (organicAmount > 0) r += organicField(angle, t) * organicAmount * base * scale;
@@ -853,7 +898,9 @@ function buildVaseShape(params) {
 
   // Overhang = hoek van de wand t.o.v. verticaal; te steil = zakt door in vase mode
   const measureOverhang = (scale) => {
-    const steps = clamp(Math.round(60 + twistRows), 60, 800);
+    // patternRows telt mee: een vlecht of visgraat verandert ook zónder twist
+    // met de hoogte, en met te weinig stappen meet je die flanken niet
+    const steps = clamp(Math.round(60 + twistRows + patternRows * 8), 60, 800);
     // minstens vier monsters per patroonperiode, anders meet je steeds dezelfde
     // fase en mis je precies de steile flanken
     const angles = clamp(Math.round(patternFreq * 4), 24, 192);
@@ -946,6 +993,7 @@ function buildVaseShape(params) {
       80 + flow * detail * 12 + swayTurns * 30 + ringCount * 8 + twistRows * detailScale
         + (bumpAmp !== 0 ? bumpRows * 12 : 0)
         + (textureAmp > 0 ? textureRows * 6 : 0)
+        + patternRows * 10
         + (rimAmp > 0 ? 40 : 0)
     ),
     80,
@@ -1105,7 +1153,12 @@ export const DECOR_PRESETS = [
   { id: 'ribbels', label: '≣ Ribbels', group: 'patroon', values: decor({ patternShape: 'ribbel', waveCount: 20, waveAmplitude: 6 }) },
   { id: 'cannelure', label: '⌇ Cannelure', group: 'patroon', values: decor({ patternShape: 'groef', waveCount: 14, waveAmplitude: 7 }) },
   { id: 'twist', label: '🌀 Twist', group: 'patroon', values: decor({ patternShape: 'ribbel', waveCount: 12, waveAmplitude: 8, twistAngle: 180 }) },
-  { id: 'vlecht', label: '🪢 Vlecht', group: 'patroon', values: decor({ patternShape: 'kabel', waveCount: 10, waveAmplitude: 9, twistAngle: 220, twistMode: 'heen', twistWaves: 2 }) },
+  // Geen twist: de vlecht draait zichzelf al twee kanten op. Een twist erbij
+  // trok de strengen scheef en dat zag er rommelig uit.
+  { id: 'vlecht', label: '🪢 Vlecht', group: 'patroon', values: decor({ patternShape: 'vlecht', waveCount: 9, waveAmplitude: 10 }) },
+  { id: 'kabel', label: '🧵 Kabel', group: 'patroon', values: decor({ patternShape: 'kabel', waveCount: 10, waveAmplitude: 9, twistAngle: 200 }) },
+  { id: 'diamant', label: '🔷 Diamant', group: 'patroon', values: decor({ patternShape: 'diamant', waveCount: 10, waveAmplitude: 7 }) },
+  { id: 'visgraat', label: '🌾 Visgraat', group: 'patroon', values: decor({ patternShape: 'visgraat', waveCount: 10, waveAmplitude: 5 }) },
   { id: 'facet', label: '⬡ Facet', group: 'patroon', values: decor({ facetCount: 8, facetStrength: 80 }) },
   { id: 'kristal', label: '💎 Kristal', group: 'patroon', values: decor({ facetCount: 6, facetStrength: 100, twistAngle: 90 }) },
   { id: 'ster', label: '✦ Ster', group: 'patroon', values: decor({ patternShape: 'ster', waveCount: 8, waveAmplitude: 12 }) },
@@ -1297,7 +1350,7 @@ export function randomVaseParams(rnd = Math.random) {
   if (style === 'patroon' || style === 'combi') {
     out.patternShape = pick([
       'golf', 'ribbel', 'ribbel', 'groef', 'paneel', 'zaag', 'punt', 'kabel',
-      'kerf', 'trap', 'schelp', 'bol',
+      'kerf', 'trap', 'schelp', 'bol', 'vlecht', 'diamant', 'visgraat',
     ]);
     out.waveCount = out.patternShape === 'paneel' ? Math.round(range(4, 9)) : Math.round(range(8, 34));
     out.waveAmplitude = Math.max(2, Math.round(range(0.45, 0.95) * safePct(out.waveCount)));

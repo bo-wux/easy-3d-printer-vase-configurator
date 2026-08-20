@@ -7,48 +7,177 @@
   <img src="https://img.shields.io/badge/STL-Export-4CAF50" alt="STL export" />
 </p>
 
-A browser-based tool for designing custom, printable vase forms. Adjust the silhouette, generate decorative patterns, tune organic shapes, and export the final STL directly from the app.
+A deep, browser-based vase designer for FDM 3D printing. Shape the silhouette
+with Bézier handles, stack decoration from fifteen pattern profiles, eight
+textures and seeded organic deformation, and export a watertight STL — all
+without leaving the page.
+
+Everything runs client-side: no account, no server, no upload. The interface is
+in Dutch.
 
 <div align="center">
   <img src="screenshots/app-overview.png" alt="3D vase configurator overview" width="1100" />
 </div>
 
-## Overview
+## What makes it different
 
-This project turns vase design into a fast, visual workflow. Instead of moving between CAD tools and slicer setup, you can iterate on proportions, surface details, decorative patterns, and printability directly in the browser before exporting a model for 3D printing.
+Most parametric vase generators give you a handful of sliders and leave
+printability to you. This one is built the other way around: **every shape it
+can produce is a shape a slicer can handle**, and it tells you when it can't.
 
-The interface is in Dutch. Everything runs client-side: no account, no server, no upload.
+- The geometry is a single radius function `r(angle, height)`, so every printed
+  layer is a closed, non-self-intersecting loop *by construction* — the failure
+  mode where a vase slices into confetti simply cannot occur.
+- The inner wall is a true erosion of the outer contour, not a radial offset, so
+  deep relief can never push the inside through the outside.
+- An automatic limiter scales decoration back until the steepest wall stays
+  within your overhang budget, and a badge over the preview warns you when the
+  silhouette itself is too steep or the vase no longer fits the build plate.
+- A Node test suite rebuilds the actual exported bytes for 100+ configurations
+  and virtually slices them, so regressions get caught before a printer does.
 
-## Features
+## The design surface
 
-### Shape
+### Shape — silhouette with pen-tool curves
 
-- Real-time 3D preview while editing, with turntable and print-bed grid
-- 8 silhouette presets (urn, tulip, jug, hourglass, bud, column, cone, tapered) plus a drag-and-drop profile editor: add, move and delete control points, snap with Shift, nudge with the arrow keys
-- Cross-section editor with 11 presets (round, oval, triangle … star, flower, lobed, free-form), adjustable side count, 1×–12× rotational symmetry and mirroring inside the sector
+Fourteen silhouette presets (urn, tulip, jug, hourglass, bud, column, cone,
+tapered, bottle, amphora, sphere, trumpet, carafe, gourd) are starting points,
+not limits. Underneath sits a full profile editor:
 
-### Decoration
+- Drag control points, add them with a double-click or the pen tool, delete with
+  `Delete`. Hold `Shift` to snap, use the arrow keys to nudge by 1 mm or 1 %.
+- **Each point carries in/out curve handles, like the pen tool in a drawing
+  program.** Drag a handle away from its point and the bend becomes fuller; drag
+  it closer and the transition sharpens. Double-click resets it.
+- The default handle position sits a third along each segment, horizontally —
+  the exact configuration where the cubic Bézier reduces to the smoothstep the
+  editor used before it had handles, so designs made without touching a handle
+  keep precisely the shape they always had.
+- The two handles in a segment are scaled back if they would overlap, which
+  keeps height monotonic: one height can never map to two diameters.
 
-- 20 decor presets and 8 pattern profiles (wave, rib, flute, star, panel, saw, spike, cable) with repeat count and depth
-- Twist (continuous or back-and-forth), facets and horizontal rings
-- 6 surface textures, bump grids with staggered rows, and a wavy rim
-- Organic mode: seeded harmonic deformation with detail, flow and sway controls for asymmetric, sculptural forms
-- 🎲 Surprise me generates a complete random design, including a random filament colour and finish
+### Cross-section — the shape seen from above
 
-### Print and export
+Fourteen presets, from round and oval through polygons (3–24 sides) to star,
+flower, lobed, gear, scalloped and egg, plus free-hand drawing. The side count
+is a slider, so a hexagon becomes a 24-gon without leaving the preset.
 
-- Binary STL export straight from the browser, rotated Z-up with the bottom flat on the build plate, named `vaas_H..._D..._W....stl`
-- Vase mode export: a single-wall solid for the spiral/vase mode of your slicer
-- Wall thickness 0.8–2.4 mm (0.8 mm = one nozzle line, 1.2 mm = three lines on a 0.4 mm nozzle)
-- "Keep printable" scales decoration back automatically until the steepest wall stays within your maximum overhang, with a live status bar showing overhang, layer count and fit on the build plate
-- Filament colour and finish preview (matte, basic, silk)
-- Bambu Lab P1S defaults: 256 mm bed, max 250 mm height, max 220 mm diameter, 0.4 mm nozzle
+Drawing is symmetry-aware: pick 1× (free), 2×, 3×, 4×, 5×, 6×, 8× or 12× and you
+only draw one sector while the rest is mirrored or copied around. Right-click a
+point to switch it between rounded and hard-cornered. The largest radius always
+normalises to the silhouette diameter, so changing the cross-section never
+changes how wide the vase actually is.
 
-### Workflow
+### Pattern — large repeating relief
 
-- Design library: save, update, rename, duplicate and delete designs with thumbnails, stored in `localStorage`
-- Automatic draft autosave, so a refresh never loses your work
-- Undo/redo with `Ctrl+Z` / `Ctrl+Shift+Z`
+Fifteen profiles, each a different way of going around the vase:
+
+| | |
+|---|---|
+| **Golf** | plain sine wave |
+| **Ribbel** / **Groef** | rounded ribs / hollow flutes |
+| **Ster** | triangle wave, sharp points |
+| **Paneel** | flat panels with soft transitions |
+| **Zaag** | sawtooth: steep flank, gentle slope |
+| **Punt** / **Kerf** | narrow raised ridges / narrow deep notches |
+| **Kabel** | rope-like double lobe per repeat |
+| **Trap** | stepped terraces |
+| **Schelp** | asymmetric shell wave |
+| **Bol** | full, rounded lobes |
+| **Vlecht** | two counter-rotating strands, the upper one crossing over |
+| **Diamant** | the same two strands multiplied into diamond facets |
+| **Visgraat** | a slope that tilts back and forth, herringbone-style |
+
+The last three vary with height as well as angle — that is what makes a real
+braid possible, since something has to run clockwise *and* counter-clockwise.
+Their vertical repeat is deliberately stretched to long diagonals rather than
+square cells: square cells climb so fast that the auto-limiter clamps the relief
+to a quarter of what you asked for.
+
+On top of the profile: **repeat count** and **depth**, a **twist** (continuous or
+back-and-forth with 1–4 turning points), **facets** for a polygonal body, and
+horizontal **rings**.
+
+### Texture — fine surface relief
+
+Eight textures — fine lines, diamond crosshatch, studs, scales, woven, rough,
+diagonal and hammered — with adjustable fineness and depth. Texture stacks *on
+top of* the pattern rather than replacing it, which the panel says out loud so
+the combination is a choice and not a surprise.
+
+Also here: a **bump grid** (columns × rows, staggered or aligned, positive for
+knobs and negative for dimples) and a **wavy rim** that dips the opening in a
+scallop.
+
+### Organic — irregular, hand-pinched forms
+
+Seeded harmonic deformation for shapes that don't look computed:
+
+- **Vervorming** — how far the wall strays from round
+- **Detail** — few large bulges or many small ones
+- **Verloop** — how much the deformation drifts as it climbs
+- **Scheefheid** and **Scheef draai** — the centre line itself wanders, so the
+  vase leans or spirals while its foot stays flat and stable
+- **Seed** — the same seed always gives the same vase; a new one reshuffles it
+
+### Style presets
+
+Thirty-two one-click looks. Each preset declares which tab it drives and only
+appears there, so an organic style is not hiding under Pattern and adjusting a
+texture style means looking exactly where you picked it. Every preset replaces
+all decoration — the panel says so — and *Glad* clears everything.
+
+### Surprise me
+
+🎲 generates a complete design: silhouette, proportions, cross-section, one
+coherent decoration style, filament colour and finish. Height is drawn first and
+the belly derived from it, so sizes actually spread across 90–250 mm instead of
+piling up against the printer's limit. If a draw comes out too steep, it is made
+more slender before its diameters are flattened — flattening turns a
+characterful shape into a cylinder.
+
+## Printing and export
+
+- **Binary STL**, rotated Z-up with a flat first layer at Z = 0, named
+  `vaas_H<height>_D<diameter>_W<wall>.stl`
+- **Vase mode export** produces a solid body with no inner wall, for the
+  spiral/vase mode of your slicer. A wavy rim stays flat in this mode: a single
+  continuous spiral cannot print separate tongues.
+- **Wall thickness** 0.8–2.4 mm — 0.8 mm is one nozzle line, 1.2 mm is three
+  lines on a 0.4 mm nozzle
+- **Auto printbaar houden** scales decoration until the steepest wall respects
+  your maximum overhang (15–60°). The status bar reports how far it scaled back.
+- **Warnings** appear as a badge over the preview when the overhang exceeds the
+  limit, the vase outgrows the build volume, or the safety limiter is switched
+  off — the same conditions that make Bambu Studio complain about floating
+  regions.
+- 18 filament colours and matte / basic / silk finishes, for preview only:
+  colour is not part of an STL, and on a single-nozzle printer the filament in
+  the machine decides the colour.
+- Defaults target a **Bambu Lab P1S**: 256 mm bed, 250 mm maximum height, 220 mm
+  maximum diameter, 0.4 mm nozzle.
+
+## Workflow
+
+- **Design library** in `localStorage`: save, update, rename, duplicate, delete.
+  Saving needs no name — one click stores it under a generated one like
+  “Schubben 88×180”. Designs are never silently evicted; if browser storage
+  fills up, older previews are dropped before any design is.
+- The header shows whether you are editing a saved design (📌) and whether it has
+  unsaved changes (✏️). Saving a modified design asks whether to overwrite or
+  store it as a new one rather than guessing.
+- **Draft autosave**, so a refresh never loses work in progress.
+- **Undo/redo** with `Ctrl+Z` / `Ctrl+Shift+Z`, coalescing rapid slider drags
+  into single steps.
+
+## Performance
+
+A heavily decorated vase costs hundreds of milliseconds to evaluate, and three
+places need it at once (control panel, warning badge, mesh builder). A keyed
+cache gives them one shared build, so changing filament or finish costs nothing.
+The viewer and readouts run from a `useDeferredValue` snapshot, which keeps
+slider dragging smooth and shows a “Bezig met bijwerken” indicator while the
+preview catches up.
 
 ## Screenshots
 
@@ -58,82 +187,65 @@ The interface is in Dutch. Everything runs client-side: no account, no server, n
   <img src="screenshots/viewer-detail.png" alt="Detailed 3D vase viewer" width="980" />
 </div>
 
-## Why this project
-
-The goal is to make custom vase design accessible, fast, and flexible for makers. It is ideal for:
-
-- decorative home objects
-- custom gifts and one-off pieces
-- maker-lab experiments
-- rapid prototyping of printable vase forms
-
-## Tech stack
-
-- React 18
-- Vite
-- Three.js
-- @react-three/fiber
-- @react-three/drei
-
 ## Getting started
-
-### 1) Clone the repository
 
 ```bash
 git clone https://github.com/bo-wux/easy-3d-printer-vase-configurator.git
 cd easy-3d-printer-vase-configurator
-```
-
-### 2) Install dependencies
-
-```bash
 npm install
+npm run dev          # http://localhost:3000
+npm run build        # production build in dist/
 ```
 
-### 3) Run locally
-
-```bash
-npm run dev
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-### 4) Build for production
-
-```bash
-npm run build
-```
-
-The build output is generated in the `dist` folder.
+> Serving the folder through Apache/nginx directly will show a blank page: this
+> is a Vite project, and `index.html` references `/src/main.jsx`, which needs the
+> dev server or a build.
 
 ## How it works
 
-Every vase is a single radius function `r(angle, height)` around an optionally displaced centre line. Because of that, each layer is a closed, non-self-intersecting loop by definition, which is exactly what an FDM slicer needs. The layers of the shape are stacked in order: silhouette → pattern → facets → rings → organic harmonics → sway.
+Every vase is a radius function `r(angle, height)` around an optionally
+displaced centre line, evaluated in a fixed order:
 
-The inner wall is not a simple radial offset but a true erosion of the outer contour, so decoration can never push the inside through the outside. The exported mesh is watertight, has a flat first layer at Z=0 and keeps at least one nozzle width of material everywhere.
+```text
+silhouette (Bézier profile)
+  → cross-section field
+    → pattern + facets + rings
+      → bump grid + texture
+        → organic harmonics
+          → sway of the centre line
+```
+
+Because the result is single-valued in angle for every height, each layer is a
+closed loop that a slicer can fill. The first few millimetres fade decoration in
+from zero so the base sits flat on the plate, and the fade length grows with the
+depth of the relief so the transition itself never exceeds the overhang limit.
+
+The inner wall is computed by eroding the outer contour against the actual mesh
+segments — not by subtracting a radius — which is what keeps sharp or steep
+decoration from punching through to the inside.
 
 ## Quality checks
 
-Two Node scripts rebuild the exact export geometry and validate it, so no slicer surprises:
+Two Node scripts rebuild the exact export geometry and validate it:
 
 ```bash
-# Full printability suite: watertightness, volume, bed limits and
-# virtual slicing per layer (closed contours, no self-intersections,
-# wall thickness vs. nozzle width, single contour in vase mode)
+# Full printability suite: watertightness, consistent winding, positive volume,
+# flat bottom at Z=0, build-volume limits, and virtual slicing per layer
+# (closed contours, no self-intersections, wall thickness vs. nozzle width,
+# exactly one contour in vase mode)
 node scripts/check-stl.mjs --layers=9
 
-# Optional: only run cases matching a name
-node scripts/check-stl.mjs --filter=twist
+# Only cases matching a name
+node scripts/check-stl.mjs --filter=vlecht
 
 # Lighter mesh-only topology check
 node scripts/check-mesh.mjs
 ```
 
-`check-stl.mjs` exits with code 1 when a case fails.
+The suite covers every silhouette, cross-section, pattern profile, texture and
+style preset, plus hand-tuned curve extremes and randomised designs — 118 cases.
+It exits with code 1 on failure. One case fails by design: *alles zonder limiet*
+deliberately switches off the safety limiter to prove it is doing something.
 
 ## Project structure
 
@@ -143,7 +255,8 @@ src/
 │   ├── DesignLibrary.jsx    saved designs (localStorage)
 │   ├── ExportButton.jsx     binary STL export
 │   ├── PresetThumb.jsx      preset preview icons
-│   ├── ProfileEditor.jsx    silhouette control points
+│   ├── PrintPreview.jsx     extrusion-line preview
+│   ├── ProfileEditor.jsx    silhouette control points + curve handles
 │   ├── SectionEditor.jsx    cross-section editor
 │   ├── VaseConfigurator.jsx app state, undo/redo, autosave
 │   ├── VaseControls.jsx     all control panels
@@ -161,10 +274,10 @@ scripts/
 └── check-stl.mjs            printability suite
 ```
 
+## Tech stack
+
+React 18 · Vite 5 · Three.js · @react-three/fiber · @react-three/drei
+
 ## License
 
-This project is open source and intended for maker and 3D-print workflows.
-
-## Credits
-
-Built for fast visual iteration in the design of custom 3D-printable vases.
+Open source, intended for maker and 3D-print workflows.

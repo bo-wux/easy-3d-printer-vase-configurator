@@ -117,19 +117,28 @@ const CameraRig = ({ frame, targetY }) => {
   return null;
 };
 
-/** Klein JPEG-plaatje van de huidige weergave, voor de ontwerpbibliotheek. */
-const captureThumbnail = (gl, scene, camera, maxWidth = 480) => {
+/**
+ * Klein JPEG-plaatje van de huidige weergave, voor de ontwerpbibliotheek.
+ *
+ * De viewer is breed, maar een vaas is smal en hoog: zonder uitsnede bestaat de
+ * preview vooral uit lege printplaat naast de vaas. We knippen daarom een
+ * staande strook uit het midden, waar de vaas altijd staat.
+ */
+const THUMB_ASPECT = 0.72; // breedte / hoogte
+const captureThumbnail = (gl, scene, camera, outWidth = 360) => {
   gl.render(scene, camera);
   const src = gl.domElement;
   if (!src.width || !src.height) return null;
-  const scale = Math.min(1, maxWidth / src.width);
+  const cropH = src.height;
+  const cropW = Math.min(src.width, Math.round(cropH * THUMB_ASPECT));
+  const cropX = Math.round((src.width - cropW) / 2);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(src.width * scale));
-  canvas.height = Math.max(1, Math.round(src.height * scale));
+  canvas.width = outWidth;
+  canvas.height = Math.round(outWidth / THUMB_ASPECT);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#11141c';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(src, cropX, 0, cropW, cropH, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', 0.72);
 };
 
