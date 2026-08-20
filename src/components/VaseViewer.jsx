@@ -118,7 +118,7 @@ const CameraRig = ({ frame, targetY }) => {
 };
 
 /** Klein JPEG-plaatje van de huidige weergave, voor de ontwerpbibliotheek. */
-const captureThumbnail = (gl, scene, camera, maxWidth = 340) => {
+const captureThumbnail = (gl, scene, camera, maxWidth = 480) => {
   gl.render(scene, camera);
   const src = gl.domElement;
   if (!src.width || !src.height) return null;

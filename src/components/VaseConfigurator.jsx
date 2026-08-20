@@ -3,7 +3,7 @@ import VaseControls from './VaseControls';
 import VaseViewer from './VaseViewer';
 import ExportButton from './ExportButton';
 import DesignLibrary from './DesignLibrary';
-import { DEFAULT_SHAPE, profilePoints } from '../lib/vaseShape';
+import { DEFAULT_SHAPE, profilePoints, createVaseShape, maxProfileDiameter, PRINTER_LIMITS } from '../lib/vaseShape';
 import {
   loadDesigns, saveDesign, updateDesign, duplicateDesign, deleteDesign,
   suggestName, saveDraft, loadDraft, saveActiveId, loadActiveId,
@@ -131,6 +131,22 @@ const VaseConfigurator = () => {
     [vaseParams, active]
   );
 
+  // Eén centrale plek voor "print dit niet zonder problemen" — als badge over
+  // de 3D-preview, zodat je het altijd ziet (ongeacht welk tabblad open staat)
+  // zonder dat dezelfde melding ook nog in de zijbalk en boven de exportknop
+  // staat.
+  const printIssues = useMemo(() => {
+    const shape = createVaseShape(vaseParams);
+    const maxDiameter = maxProfileDiameter(vaseParams);
+    const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && vaseParams.height <= PRINTER_LIMITS.maxHeight;
+    const tooSteep = shape.maxOverhangDeg > vaseParams.maxOverhang + 0.5;
+    return [
+      tooSteep && `Overhang van ${Math.round(shape.maxOverhangDeg)}° (limiet ${vaseParams.maxOverhang}°) — kan drijvende gebieden geven zonder supports. Verhoog "Max. overhang" of pas de vorm aan.`,
+      !fitsBed && `Past niet op het bouwvolume (Ø${PRINTER_LIMITS.maxDiameter}mm × ${PRINTER_LIMITS.maxHeight}mm hoog).`,
+      vaseParams.autoLimit === false && 'Auto printbaar staat uit — bij diep reliëf kan de wand door zichzelf heen lopen en slicet de STL niet schoon.',
+    ].filter(Boolean);
+  }, [vaseParams]);
+
   const flash = (message, tone = 'ok') => setToast({ message, tone, id: Date.now() });
 
   useEffect(() => {
@@ -195,13 +211,17 @@ const VaseConfigurator = () => {
 
   const handleCaptureReady = useCallback((fn) => { captureRef.current = fn; }, []);
 
-  // Eén klik opslaan: geen naam nodig, het gaat om hoe de vaas eruit ziet.
-  // Bestaat er al een actief ontwerp, dan wordt dat bijgewerkt; anders komt
-  // er een nieuw ontwerp bij met een automatisch gegenereerde naam (die kan
-  // later altijd nog aangepast worden via "Mijn ontwerpen").
+  // Opslaan: geen naam nodig, het gaat om hoe de vaas eruit ziet.
+  // - Nog geen ontwerp geladen/opgeslagen: gewoon direct opslaan, met een
+  //   automatisch gegenereerde naam (die later aangepast kan worden).
+  // - Wel een geladen ontwerp, maar niets gewijzigd: niets te doen.
+  // - Wel een geladen ontwerp mét wijzigingen: nooit stilzwijgend kiezen —
+  //   open de bibliotheek, waar "↻ Bijwerken" (overschrijven) en
+  //   "💾 Opslaan als nieuw" naast elkaar staan, zodat je zelf kiest.
   const handleQuickSave = () => {
-    if (active) handleUpdate();
-    else handleSave('');
+    if (!active) { handleSave(''); return; }
+    if (!dirty) { flash('Geen wijzigingen om op te slaan'); return; }
+    setLibraryOpen(true);
   };
 
   return (
@@ -217,21 +237,28 @@ const VaseConfigurator = () => {
 
         <div className="header-actions">
           {active && (
-            <span className={`active-design${dirty ? ' dirty' : ''}`}>
-              {active.name}{dirty ? ' • gewijzigd' : ''}
+            <span className={`active-design${dirty ? ' dirty' : ''}`} title="Je bewerkt dit opgeslagen ontwerp">
+              {dirty ? '✏️' : '📌'} {active.name}{dirty ? ' • gewijzigd' : ''}
             </span>
           )}
           <button
             type="button"
             className="header-button"
             onClick={handleQuickSave}
-            title={active ? `“${active.name}” bijwerken` : 'Opslaan met een automatisch gegenereerde naam'}
+            title={
+              !active
+                ? 'Opslaan als nieuw ontwerp, met een automatisch gegenereerde naam'
+                : dirty
+                  ? 'Wijzigingen gevonden — kies overschrijven of als nieuw opslaan'
+                  : 'Geen wijzigingen sinds het laatste opslaan'
+            }
           >
             💾 Opslaan
           </button>
           <button type="button" className="header-button" onClick={() => setLibraryOpen(true)}>
             📚 Mijn ontwerpen{designs.length > 0 && <span className="count">{designs.length}</span>}
           </button>
+          <ExportButton meshRef={meshRef} params={vaseParams} />
         </div>
       </header>
 
@@ -246,11 +273,16 @@ const VaseConfigurator = () => {
             canUndo={steps.undo > 0}
             canRedo={steps.redo > 0}
           />
-          <ExportButton meshRef={meshRef} params={vaseParams} />
         </aside>
 
         <div className="viewer-container">
           <VaseViewer params={vaseParams} onMeshCreated={setMeshRef} onCaptureReady={handleCaptureReady} />
+          {printIssues.length > 0 && (
+            <div className="print-warning-badge" role="alert" title={printIssues.join(' ')}>
+              <strong>⚠️ Waarschuwing</strong>
+              {printIssues.map((issue) => <p key={issue}>{issue}</p>)}
+            </div>
+          )}
           <div className="viewer-info">
             <span>🖱️ slepen = draaien</span>
             <span>⇕ scrollen = zoomen</span>

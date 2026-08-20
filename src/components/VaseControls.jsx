@@ -286,7 +286,6 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
     [maxDiameter, params.height],
   );
 
-  const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
   const layers = Math.ceil(params.height / params.layerHeight);
   const matches = (values) => Object.entries(values).every(([k, v]) => params[k] === v);
   // dieper dan dit loopt het bobbelraster in zichzelf, dus houdt de slider ook op
@@ -642,17 +641,8 @@ const VaseControls = ({ params, onParamChange, onParamsChange, onUndo, onRedo, c
             dieper instellen helpt niet, verhoog eerst de max. overhang.
           </p>
         )}
-        {shape.baseOverhangDeg > overhangLimit && (
-          <p className="bad">⚠️ Het silhouet zelf is te steil ({Math.round(shape.baseOverhangDeg)}°) — pas de diameters aan.</p>
-        )}
-        {params.autoLimit === false && (
-          <p className="bad">
-            ⚠️ Auto printbaar staat uit — bij diep reliëf kan de wand door zichzelf heen lopen en slicet de STL niet schoon.
-          </p>
-        )}
-        {!fitsBed && (
-          <p className="bad">⚠️ Past niet op de P1S ({PRINTER_LIMITS.maxDiameter}mm Ø × {PRINTER_LIMITS.maxHeight}mm).</p>
-        )}
+        {/* Een eventuele "kan niet printen"-melding staat als badge over de 3D-preview,
+            zodat hij niet 2x hetzelfde zegt en ongeacht het tabblad zichtbaar blijft. */}
       </div>
     </div>
   );
