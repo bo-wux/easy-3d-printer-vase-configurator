@@ -3,7 +3,6 @@ import { DECOR_PRESETS, PATTERN_SHAPES, maxProfileDiameter } from './vaseShape';
 const KEY = 'evc.designs.v1';
 const DRAFT_KEY = 'evc.draft.v1';
 const ACTIVE_KEY = 'evc.active.v1';
-const MAX_DESIGNS = 40;
 // aantal ontwerpen dat zijn preview mag houden als de opslag vol raakt
 const KEEP_THUMBS = 8;
 
@@ -58,7 +57,7 @@ export const saveDesign = (name, params, thumb) => {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-  const list = persist([design, ...existing].slice(0, MAX_DESIGNS));
+  const list = persist([design, ...existing]);
   return { list, design: list.find((d) => d.id === design.id) || design };
 };
 
@@ -71,7 +70,7 @@ export const duplicateDesign = (id) => {
   const src = loadDesigns().find((d) => d.id === id);
   if (!src) return loadDesigns();
   const copy = { ...src, id: newId(), name: `${src.name} (kopie)`, createdAt: Date.now(), updatedAt: Date.now() };
-  return persist([copy, ...loadDesigns()].slice(0, MAX_DESIGNS));
+  return persist([copy, ...loadDesigns()]);
 };
 
 export const deleteDesign = (id) => persist(loadDesigns().filter((d) => d.id !== id));

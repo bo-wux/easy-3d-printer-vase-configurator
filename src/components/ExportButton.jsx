@@ -1,11 +1,23 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 import { buildVaseMesh } from '../lib/vaseMesh';
-import { maxProfileDiameter } from '../lib/vaseShape';
+import { createVaseShape, maxProfileDiameter, PRINTER_LIMITS } from '../lib/vaseShape';
 
 const ExportButton = ({ meshRef, params }) => {
   const vaseMode = !!params.vaseMode;
+
+  // Zelfde check als de slicer straks doet: te steile overhang (met of zonder
+  // auto-limit) of te groot voor het bouwvolume — dat wordt anders pas bij het
+  // importeren in Bambu Studio zichtbaar als "drijvende gebieden".
+  const shape = useMemo(() => createVaseShape(params), [params]);
+  const maxDiameter = maxProfileDiameter(params);
+  const fitsBed = maxDiameter <= PRINTER_LIMITS.maxDiameter && params.height <= PRINTER_LIMITS.maxHeight;
+  const tooSteep = shape.maxOverhangDeg > params.maxOverhang + 0.5;
+  const printIssues = [
+    tooSteep && `Overhang van ${Math.round(shape.maxOverhangDeg)}° (limiet ${params.maxOverhang}°) — kan drijvende gebieden geven zonder supports. Verhoog "Max. overhang" of pas de vorm aan op het tabblad 🖨️ Print.`,
+    !fitsBed && `Past niet op het bouwvolume (Ø${PRINTER_LIMITS.maxDiameter}mm × ${PRINTER_LIMITS.maxHeight}mm hoog).`,
+  ].filter(Boolean);
 
   const handleExport = () => {
     if (!meshRef) {
@@ -74,7 +86,13 @@ const ExportButton = ({ meshRef, params }) => {
 
   return (
     <div>
-      <button 
+      {printIssues.length > 0 && (
+        <div className="print-warning" role="alert">
+          <strong>⚠️ Waarschuwing</strong>
+          {printIssues.map((issue) => <p key={issue}>{issue}</p>)}
+        </div>
+      )}
+      <button
         className="export-button"
         onClick={handleExport}
         disabled={!meshRef}

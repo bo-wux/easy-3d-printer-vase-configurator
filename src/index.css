@@ -794,6 +794,27 @@ body {
   color: var(--muted);
 }
 
+.print-warning {
+  margin-bottom: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  background: rgba(242, 181, 68, 0.14);
+  border: 1px solid var(--warn);
+  border-radius: 9px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--warn);
+}
+
+.print-warning strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.print-warning p {
+  margin: 0.15rem 0 0;
+  color: var(--text);
+}
+
 /* ---------- scrollbar ---------- */
 
 .tab-body::-webkit-scrollbar {

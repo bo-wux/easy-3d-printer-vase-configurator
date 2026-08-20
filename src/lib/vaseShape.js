@@ -957,6 +957,42 @@ export function applySilhouette(silhouette, bellyDiameter, height) {
 }
 
 /**
+ * Snelle, iets grovere schatting van baseOverhangDeg — alleen het silhouet en de
+ * (getwiste) doorsnede, zonder de rest van createVaseShape (golven, textuur,
+ * organic, de eigen auto-limit bisectie...) mee te bouwen. Voor de randomizer
+ * hieronder, die dit tientallen keren per klik moet kunnen doorrekenen zonder
+ * de UI te blokkeren; de exacte, volledige meting (createVaseShape) blijft de
+ * uiteindelijke check.
+ */
+function estimateBaseOverhang(p) {
+  const nodes = profilePoints(p);
+  const baseRadiusAt = (t) => profileRadiusAt(nodes, t);
+  const section = buildSectionField(p.section);
+  const twistRad = (p.twistAngle / 180) * Math.PI;
+  const twistWaves = clamp(p.twistWaves ?? 1, 0.25, 4);
+  const rotAt = (t) => (p.twistMode === 'heen'
+    ? twistRad * Math.sin(Math.PI * twistWaves * t)
+    : twistRad * t);
+  const radiusAt = (a, t) => baseRadiusAt(t) * (section ? section.at(a - rotAt(t)) : 1);
+
+  const steps = 72;
+  const angles = 64;
+  let max = 0;
+  for (let i = 0; i < steps; i++) {
+    const t0 = i / steps;
+    const t1 = (i + 1) / steps;
+    const dy = (p.height / steps);
+    for (let j = 0; j < angles; j++) {
+      const a = (j / angles) * TAU;
+      const dr = Math.abs(radiusAt(a, t1) - radiusAt(a, t0));
+      const deg = (Math.atan2(dr, dy) * 180) / Math.PI;
+      if (deg > max) max = deg;
+    }
+  }
+  return max;
+}
+
+/**
  * Genereer een complete, bewust "mooie" vaas.
  * Regels: harmonieuze hoogte/breedte-verhouding, één duidelijke decoratie-stijl,
  * amplitude gekoppeld aan het aantal herhalingen, en een silhouet dat binnen de
@@ -1018,13 +1054,6 @@ export function randomVaseParams(rnd = Math.random) {
     organicFlow: 60,
     swayTurns: 0.5,
   };
-
-  // Silhouet bijsturen tot het niet te steil overhangt
-  for (let i = 0; i < 8; i++) {
-    if (createVaseShape(out).baseOverhangDeg <= out.maxOverhang) break;
-    const mean = out.profile.reduce((s, pt) => s + pt.d, 0) / out.profile.length;
-    out.profile = out.profile.map((pt) => ({ ...pt, d: Math.round(mean + (pt.d - mean) * 0.85) }));
-  }
 
   // Doorsnede: meestal rond, soms een veelhoek of lobben voor een strakker karakter
   if (chance(0.28)) {
@@ -1107,6 +1136,38 @@ export function randomVaseParams(rnd = Math.random) {
   if (chance(0.15)) {
     out.rimWaveCount = pick([6, 8, 10, 12, 16]);
     out.rimWaveDepth = Math.round(range(4, 12));
+  }
+
+  // Silhouet bijsturen tot het niet te steil overhangt: trek elk profielpunt
+  // naar de gemiddelde diameter toe én dempen we de twist. Dit staat bewust na
+  // de doorsnede-keuze en de twist hierboven: een ster/veelhoek-doorsnede die
+  // ronddraait met de hoogte (twist) overhangt ook bij een perfect cilindrisch
+  // profiel — alleen diameters middelen lost dat niet op, dus corrigeren vóór
+  // die keuzes zou voor niets zijn geweest. Gebruikt de goedkope schatter
+  // (estimateBaseOverhang) tijdens het itereren: de volle createVaseShape
+  // rekent ook meteen alle decoratie en zijn eigen auto-limit-bisectie door,
+  // en dat tientallen keren per klik zou "Verras me" merkbaar laten haperen.
+  {
+    const mean = out.profile.reduce((s, pt) => s + pt.d, 0) / out.profile.length;
+    for (let i = 0; i < 12; i++) {
+      if (estimateBaseOverhang(out) <= out.maxOverhang) break;
+      out.profile = out.profile.map((pt) => {
+        const dev = pt.d - mean;
+        const shrunk = Math.sign(dev) * Math.floor(Math.abs(dev) * 0.7);
+        return { ...pt, d: Math.round(mean + shrunk) };
+      });
+      out.twistAngle = Math.sign(out.twistAngle) * Math.floor(Math.abs(out.twistAngle) * 0.7);
+    }
+    // Vangnet: de schatter is bewust wat grover dan de exacte meting; die
+    // exacte meting (createVaseShape) is de uiteindelijke, harde garantie.
+    // Blijft die alsnog te steil (bv. een heel scherpe ster-doorsnede), val
+    // dan terug op een rechte cilinder zonder twist — die overhangt per
+    // definitie nooit.
+    if (createVaseShape(out).baseOverhangDeg > out.maxOverhang) {
+      out.twistAngle = 0;
+      out.twistMode = 'lineair';
+      out.profile = out.profile.map((pt) => ({ ...pt, d: Math.round(mean) }));
+    }
   }
 
   return out;

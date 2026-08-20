@@ -36,7 +36,7 @@ const VaseConfigurator = () => {
   const [vaseParams, setVaseParams] = useState(() => withProfile(loadDraft() || {}));
   const [meshRef, setMeshRef] = useState(null);
   const [designs, setDesigns] = useState(() => loadDesigns());
-  const [library, setLibrary] = useState({ open: false, focusSave: false });
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [active, setActive] = useState(null);
   const [toast, setToast] = useState(null);
 
@@ -150,7 +150,6 @@ const VaseConfigurator = () => {
       const { list, design } = saveDesign(name, vaseParams, thumb);
       setDesigns(list);
       markSaved(design);
-      setLibrary({ open: true, focusSave: false });
       flash(`Opgeslagen als “${design.name}”`);
     } catch (err) {
       flash(err.message, 'bad');
@@ -180,7 +179,7 @@ const VaseConfigurator = () => {
     setVaseParams(params);
     savedSnapshot.current = JSON.stringify(params);
     setActive({ id: design.id, name: design.name });
-    setLibrary({ open: false, focusSave: false });
+    setLibraryOpen(false);
     flash(`“${design.name}” geladen`);
   };
 
@@ -195,6 +194,15 @@ const VaseConfigurator = () => {
   };
 
   const handleCaptureReady = useCallback((fn) => { captureRef.current = fn; }, []);
+
+  // Eén klik opslaan: geen naam nodig, het gaat om hoe de vaas eruit ziet.
+  // Bestaat er al een actief ontwerp, dan wordt dat bijgewerkt; anders komt
+  // er een nieuw ontwerp bij met een automatisch gegenereerde naam (die kan
+  // later altijd nog aangepast worden via "Mijn ontwerpen").
+  const handleQuickSave = () => {
+    if (active) handleUpdate();
+    else handleSave('');
+  };
 
   return (
     <div className="app">
@@ -213,10 +221,15 @@ const VaseConfigurator = () => {
               {active.name}{dirty ? ' • gewijzigd' : ''}
             </span>
           )}
-          <button type="button" className="header-button" onClick={() => setLibrary({ open: true, focusSave: true })}>
+          <button
+            type="button"
+            className="header-button"
+            onClick={handleQuickSave}
+            title={active ? `“${active.name}” bijwerken` : 'Opslaan met een automatisch gegenereerde naam'}
+          >
             💾 Opslaan
           </button>
-          <button type="button" className="header-button" onClick={() => setLibrary({ open: true, focusSave: false })}>
+          <button type="button" className="header-button" onClick={() => setLibraryOpen(true)}>
             📚 Mijn ontwerpen{designs.length > 0 && <span className="count">{designs.length}</span>}
           </button>
         </div>
@@ -246,14 +259,13 @@ const VaseConfigurator = () => {
       </div>
 
       <DesignLibrary
-        open={library.open}
-        autoFocusSave={library.focusSave}
+        open={libraryOpen}
         designs={designs}
         activeId={active ? active.id : null}
         activeName={active ? active.name : ''}
         dirty={dirty}
         suggestedName={suggestName(vaseParams)}
-        onClose={() => setLibrary({ open: false, focusSave: false })}
+        onClose={() => setLibraryOpen(false)}
         onSave={handleSave}
         onUpdate={handleUpdate}
         onLoad={handleLoad}

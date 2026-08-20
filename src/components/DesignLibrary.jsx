@@ -69,7 +69,7 @@ const DesignCard = ({ design, active, onLoad, onRename, onDuplicate, onDelete })
 };
 
 const DesignLibrary = ({
-  open, designs, activeId, activeName, dirty, suggestedName, autoFocusSave,
+  open, designs, activeId, activeName, dirty, suggestedName,
   onClose, onSave, onUpdate, onLoad, onRename, onDuplicate, onDelete,
 }) => {
   const [name, setName] = useState('');
@@ -81,11 +81,7 @@ const DesignLibrary = ({
   useEffect(() => {
     if (!open) return;
     setName(seedRef.current);
-    if (autoFocusSave) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [open, autoFocusSave]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -114,7 +110,7 @@ const DesignLibrary = ({
             ref={inputRef}
             className="save-input"
             value={name}
-            placeholder="Naam van dit ontwerp"
+            placeholder="Naam (optioneel)"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
           />
