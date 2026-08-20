@@ -506,6 +506,30 @@ body {
   stroke: #fff;
 }
 
+/* pen-tool: handgrepen waarmee je de ronding van het geselecteerde punt stuurt */
+.profile-grip-arm {
+  stroke: var(--warn);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.75;
+}
+
+.profile-grip {
+  fill: var(--panel);
+  stroke: var(--warn);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+.profile-grip:hover {
+  fill: var(--warn);
+}
+
+/* zelf versleept, dus niet meer de standaardronding */
+.profile-grip.custom {
+  fill: var(--warn);
+}
+
 .section-editor {
   display: block;
   width: 100%;
@@ -988,6 +1012,13 @@ body {
   gap: 0.9rem;
   overflow-y: auto;
   padding-right: 0.25rem;
+  /* Zonder deze twee duwt het raster zijn volle hoogte door naar de kaarten in
+     plaats van te scrollen: elke preview wordt dan platter naarmate je meer
+     ontwerpen opslaat. flex/min-height maakt scrollen mogelijk, align-content
+     houdt de rijen op hun eigen hoogte in plaats van ze uit te rekken. */
+  flex: 1;
+  min-height: 0;
+  align-content: start;
 }
 
 .design-card {
@@ -1014,6 +1045,8 @@ body {
   position: relative;
   display: block;
   width: 100%;
+  /* vaste hoogte die niet meekrimpt als er veel ontwerpen in het raster staan */
+  flex: 0 0 260px;
   height: 260px;
   padding: 0;
   border: 0;

@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { PRINTER_LIMITS, profileRadiusAt, MIN_NODE_GAP } from '../lib/vaseShape';
+import { PRINTER_LIMITS, profileRadiusAt, profileHandles, MIN_NODE_GAP } from '../lib/vaseShape';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const SAMPLES = 80;
@@ -19,13 +19,19 @@ const ProfileEditor = ({ profile, height, selected, pen = false, onSelect, onMov
   const halfWidth = (maxD / 2) * 1.18;
   const pad = Math.max(6, maxD * 0.08);
 
-  const toModel = (event) => {
+  /** Muispositie in modelruimte: x = straal in mm, y = hoogte in mm. */
+  const toLocal = (event) => {
     const ctm = planeRef.current?.getScreenCTM();
     if (!ctm) return null;
     const point = planeRef.current.ownerSVGElement.createSVGPoint();
     point.x = event.clientX;
     point.y = event.clientY;
-    const local = point.matrixTransform(ctm.inverse());
+    return point.matrixTransform(ctm.inverse());
+  };
+
+  const toModel = (event) => {
+    const local = toLocal(event);
+    if (!local) return null;
     let d = clamp(Math.abs(local.x) * 2, PRINTER_LIMITS.minDiameter, PRINTER_LIMITS.maxDiameter);
     let t = clamp(local.y / height, 0, 1);
     if (event.shiftKey) {
@@ -44,6 +50,23 @@ const ProfileEditor = ({ profile, height, selected, pen = false, onSelect, onMov
     onMove(index, { t, d: Math.round(next.d) });
   };
 
+  /**
+   * Handgreep verslepen, als de pen-tool in een tekenprogramma. `dt` is de
+   * lengte langs de hoogte (verder weg = flauwere bocht), `dd` de uitwijking
+   * in diameter (bepaalt de richting waarin de curve het punt verlaat).
+   * De 'in'-greep wijst naar beneden, de 'out'-greep naar boven; dt blijft
+   * daarom altijd positief.
+   */
+  const placeHandle = (index, side, event) => {
+    const local = toLocal(event);
+    if (!local) return;
+    const node = profile[index];
+    const sign = side === 'out' ? 1 : -1;
+    const dt = clamp(sign * (local.y / height - node.t), 0, 1);
+    const dd = clamp(sign * (Math.abs(local.x) * 2 - node.d), -PRINTER_LIMITS.maxDiameter, PRINTER_LIMITS.maxDiameter);
+    onMove(index, { [side === 'out' ? 'hOut' : 'hIn']: { dt, dd } });
+  };
+
   const handleDown = (index) => (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -51,6 +74,26 @@ const ProfileEditor = ({ profile, height, selected, pen = false, onSelect, onMov
     dragRef.current = index;
     onSelect(index);
     planeRef.current?.ownerSVGElement?.focus();
+  };
+
+  const gripDown = (index, side) => (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = `${index}:${side}`;
+    onSelect(index);
+  };
+
+  const gripMove = (index, side) => (event) => {
+    if (dragRef.current !== `${index}:${side}`) return;
+    placeHandle(index, side, event);
+  };
+
+  // dubbelklik = terug naar de standaardronding van dit punt
+  const gripReset = (index, side) => (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onMove(index, { [side === 'out' ? 'hOut' : 'hIn']: null });
   };
 
   const handleMove = (index) => (event) => {
@@ -79,6 +122,29 @@ const ProfileEditor = ({ profile, height, selected, pen = false, onSelect, onMov
     else return;
     event.preventDefault();
   };
+
+  // Handgrepen van het geselecteerde punt, in modelruimte (x = straal, y = mm)
+  const grips = [];
+  {
+    const node = profile[selected];
+    if (node) {
+      const h = profileHandles(profile, selected);
+      const nx = node.d / 2;
+      const ny = node.t * height;
+      if (h.out) {
+        grips.push({
+          index: selected, side: 'out', nx, ny, custom: h.out.custom,
+          x: (node.d + h.out.dd) / 2, y: (node.t + h.out.dt) * height,
+        });
+      }
+      if (h.in) {
+        grips.push({
+          index: selected, side: 'in', nx, ny, custom: h.in.custom,
+          x: (node.d - h.in.dd) / 2, y: (node.t - h.in.dt) * height,
+        });
+      }
+    }
+  }
 
   const silhouette = [];
   for (let i = 0; i <= SAMPLES; i++) {
@@ -122,6 +188,36 @@ const ProfileEditor = ({ profile, height, selected, pen = false, onSelect, onMov
         <line x1={-halfWidth} y1={0} x2={halfWidth} y2={0} className="profile-bed" vectorEffect="non-scaling-stroke" />
         <line x1={0} y1={0} x2={0} y2={height} className="profile-axis" vectorEffect="non-scaling-stroke" />
         <path d={outline} className="profile-shape" vectorEffect="non-scaling-stroke" />
+
+        {/* Handgrepen van het geselecteerde punt: verder van het punt af = een
+            flauwere, langer doorlopende bocht; dichterbij = een scherpere knik. */}
+        {grips.map((g) => (
+          <g key={g.side}>
+            <line
+              x1={g.nx}
+              y1={g.ny}
+              x2={g.x}
+              y2={g.y}
+              className="profile-grip-arm"
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle
+              cx={g.x}
+              cy={g.y}
+              r={pad * 0.4}
+              className={`profile-grip${g.custom ? ' custom' : ''}`}
+              vectorEffect="non-scaling-stroke"
+              onPointerDown={gripDown(g.index, g.side)}
+              onPointerMove={gripMove(g.index, g.side)}
+              onPointerUp={handleUp}
+              onPointerCancel={handleUp}
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={gripReset(g.index, g.side)}
+            >
+              <title>Sleep om de ronding te sturen · dubbelklik voor standaard</title>
+            </circle>
+          </g>
+        ))}
 
         {profile.map((point, index) => (
           <circle

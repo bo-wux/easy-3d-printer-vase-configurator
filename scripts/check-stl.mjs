@@ -369,6 +369,27 @@ for (const s of SILHOUETTES) add(`silhouet ${s.id}`, { ...base, ...applySilhouet
 for (const p of SECTION_PRESETS) add(`doorsnede ${p.id}`, { ...base, section: p.make() });
 for (const d of DECOR_PRESETS) add(`decor ${d.id}`, { ...base, ...d.values });
 
+// pen-tool: zelf versleepte handgrepen mogen de wand nooit door zichzelf laten
+// lopen, ook niet op de uiterste standen
+add('curve scherp', {
+  ...base,
+  profile: [
+    { t: 0, d: 55, hOut: { dt: 0.01, dd: 0 } },
+    { t: 0.32, d: 88, hIn: { dt: 0.01, dd: 0 }, hOut: { dt: 0.01, dd: 0 } },
+    { t: 0.7, d: 78, hIn: { dt: 0.01, dd: 0 }, hOut: { dt: 0.01, dd: 0 } },
+    { t: 1, d: 62, hIn: { dt: 0.01, dd: 0 } },
+  ],
+});
+add('curve flauw', {
+  ...base,
+  profile: [
+    { t: 0, d: 55, hOut: { dt: 0.9, dd: 40 } },
+    { t: 0.32, d: 88, hIn: { dt: 0.9, dd: -40 }, hOut: { dt: 0.9, dd: 40 } },
+    { t: 0.7, d: 78, hIn: { dt: 0.9, dd: 40 }, hOut: { dt: 0.9, dd: -40 } },
+    { t: 1, d: 62, hIn: { dt: 0.9, dd: -40 } },
+  ],
+});
+
 add('wand 0.8', { ...base, thickness: 0.8 });
 add('wand 2.4', { ...base, thickness: 2.4 });
 add('klein', { ...base, height: 60, profile: [{ t: 0, d: 20 }, { t: 1, d: 28 }] });

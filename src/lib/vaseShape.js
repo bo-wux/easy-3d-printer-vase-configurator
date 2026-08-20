@@ -146,13 +146,29 @@ export const MIN_NODE_GAP = 0.03;
  * Controlepunten opschonen: op volgorde, binnen de printergrenzen, en het
  * eerste en laatste punt liggen altijd exact op de bodem en de opening.
  */
+/** Handgreep opschonen; ontbreekt hij of klopt hij niet, dan geldt de standaard. */
+const cleanHandle = (h) => {
+  if (!h || !Number.isFinite(h.dt) || !Number.isFinite(h.dd)) return null;
+  return {
+    dt: clamp(h.dt, 0, 1),
+    dd: clamp(h.dd, -PRINTER_LIMITS.maxDiameter, PRINTER_LIMITS.maxDiameter),
+  };
+};
+
 export function normalizeProfile(points) {
   const list = (points || [])
     .filter((pt) => pt && Number.isFinite(pt.t) && Number.isFinite(pt.d))
-    .map((pt) => ({
-      t: clamp(pt.t, 0, 1),
-      d: clamp(Math.round(pt.d), PRINTER_LIMITS.minDiameter, PRINTER_LIMITS.maxDiameter),
-    }))
+    .map((pt) => {
+      const node = {
+        t: clamp(pt.t, 0, 1),
+        d: clamp(Math.round(pt.d), PRINTER_LIMITS.minDiameter, PRINTER_LIMITS.maxDiameter),
+      };
+      const hIn = cleanHandle(pt.hIn);
+      const hOut = cleanHandle(pt.hOut);
+      if (hIn) node.hIn = hIn;
+      if (hOut) node.hOut = hOut;
+      return node;
+    })
     .sort((a, b) => a.t - b.t);
   if (list.length < 2) return DEFAULT_SHAPE.profile.map((pt) => ({ ...pt }));
   list[0].t = 0;
@@ -179,6 +195,70 @@ export function profilePoints(p) {
   ]);
 }
 
+const cubic = (p0, p1, p2, p3, u) => {
+  const v = 1 - u;
+  return v * v * v * p0 + 3 * v * v * u * p1 + 3 * v * u * u * p2 + u * u * u * p3;
+};
+
+/**
+ * Handgrepen van het segment a→b, zoals de pen-tool ze tekent.
+ *
+ * Zonder eigen handgrepen liggen ze op een derde van het segment, horizontaal.
+ * Dat is niet zomaar een keuze: met die stand is de t-component van de bézier
+ * exact gelijk aan u, en de d-component exact 3u²−2u³ — precies de smoothstep
+ * die hier eerder stond. Ontwerpen zonder handgrepen houden dus letterlijk
+ * dezelfde vorm.
+ *
+ * `dt` is de lengte langs de hoogte (in t), `dd` de uitwijking in diameter.
+ * Samen mogen de twee dt's het segment niet overschrijden: anders loopt t niet
+ * meer monotoon op en zou één hoogte twee diameters krijgen.
+ */
+export function profileSegment(a, b) {
+  const span = b.t - a.t;
+  const third = span / 3;
+  let outDt = a.hOut ? clamp(a.hOut.dt, 0, span) : third;
+  let inDt = b.hIn ? clamp(b.hIn.dt, 0, span) : third;
+  const total = outDt + inDt;
+  if (total > span && total > 0) {
+    const k = span / total;
+    outDt *= k;
+    inDt *= k;
+  }
+  return {
+    span,
+    auto: !a.hOut && !b.hIn,
+    outDt,
+    inDt,
+    outDd: a.hOut ? a.hOut.dd : 0,
+    inDd: b.hIn ? b.hIn.dd : 0,
+  };
+}
+
+/** De handgrepen van één controlepunt, met de standaardwaarden al ingevuld. */
+export function profileHandles(points, index) {
+  const node = points[index];
+  const prev = index > 0 ? points[index - 1] : null;
+  const next = index < points.length - 1 ? points[index + 1] : null;
+  const out = next ? profileSegment(node, next) : null;
+  const inc = prev ? profileSegment(prev, node) : null;
+  return {
+    out: out ? { dt: out.outDt, dd: out.outDd, custom: !!node.hOut } : null,
+    in: inc ? { dt: inc.inDt, dd: inc.inDd, custom: !!node.hIn } : null,
+  };
+}
+
+/** u zoeken waarvoor de hoogte-component van de bézier op t uitkomt. */
+function solveU(t0, t1, t2, t3, t) {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2;
+    if (cubic(t0, t1, t2, t3, mid) < t) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 /** Straal op relatieve hoogte t, met vloeiende overgangen tussen de punten. */
 export function profileRadiusAt(points, t) {
   for (let i = 1; i < points.length; i++) {
@@ -186,8 +266,17 @@ export function profileRadiusAt(points, t) {
       const a = points[i - 1];
       const b = points[i];
       const span = b.t - a.t;
-      const local = span > 1e-6 ? clamp((t - a.t) / span, 0, 1) : 1;
-      return (a.d + (b.d - a.d) * smoothstep(local)) / 2;
+      if (span <= 1e-6) return b.d / 2;
+      const local = clamp((t - a.t) / span, 0, 1);
+      const seg = profileSegment(a, b);
+      // Standaard handgrepen: de bézier is dan bewijsbaar gelijk aan smoothstep,
+      // dus die rekenen we rechtstreeks uit. Dat scheelt de iteratieve zoektocht
+      // hieronder, en deze functie draait per mesh-punt.
+      if (seg.auto) return (a.d + (b.d - a.d) * smoothstep(local)) / 2;
+      const t1 = a.t + seg.outDt;
+      const t2 = b.t - seg.inDt;
+      const u = solveU(a.t, t1, t2, b.t, a.t + local * span);
+      return cubic(a.d, a.d + seg.outDd, b.d - seg.inDd, b.d, u) / 2;
     }
   }
   return points[0].d / 2;

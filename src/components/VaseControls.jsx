@@ -416,7 +416,11 @@ const VaseControls = ({ params, shape, onParamChange, onParamsChange, onUndo, on
                   onAdd={addNodeAt}
                   onRemove={removeNode}
                 />
-                <p className="control-hint">Sleep · Shift = vastklikken · pijltjes = fijn bijstellen · Delete = wissen</p>
+                <p className="control-hint">
+                  Sleep · Shift = vastklikken · pijltjes = fijn bijstellen · Delete = wissen.
+                  De oranje handgrepen sturen de ronding: verder van het punt af wordt de bocht
+                  flauwer, dichterbij scherper. Dubbelklik zet er weer de standaard neer.
+                </p>
               </div>
               <div className="full chip-row">
                 {profile.map((p, i) => (
